@@ -7,7 +7,7 @@
     {
       "name": "pst",
       "source": "./",
-      "description": "Local-first, on-device voice toolkit for macOS. TTS today; STT, converse, wake word, and voice cloning on the roadmap."
+      "description": "Local-first speech tooling optimized for macOS (text-to-speech and speech-to-text). On-device; TTS today, STT and more on the roadmap."
     }
   ]
 }

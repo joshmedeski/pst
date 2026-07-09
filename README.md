@@ -1,5 +1,7 @@
 # pst
 
+> **Local-first speech tooling optimized for macOS (text-to-speech and speech-to-text).**
+
 A local-first, on-device voice toolkit for macOS (Apple Silicon), packaged as a
 [Claude Code plugin](https://code.claude.com/docs/en/plugins).
 
@@ -29,8 +31,16 @@ scripts (`tts`, `tts-compare`) are on the Bash `PATH` while the plugin is
 enabled.
 
 > **Prerequisite:** the skill shells out to the local `tts` binary, which needs
-> the `mlx-audio` engine. Do the one-time [engine setup](#setting-up-the-tts-engine-mlx-audio)
-> below before first use.
+> the `mlx-audio` engine. Run the one-time setup first:
+>
+> ```
+> /pst:setup
+> ```
+>
+> This installs the on-device tooling via `uv` (see
+> [engine setup](#setting-up-the-tts-engine-mlx-audio) for what it does and the
+> manual equivalent). It requires [`uv`](https://github.com/astral-sh/uv) — the
+> command tells you how to install it if it's missing.
 
 ### Local development
 
@@ -63,9 +73,28 @@ tts --help
 
 - **28 voices** across American/British and female/male, e.g. `af_heart`
   (default), `am_michael`, `bf_emma`, `bm_george`.
-- Streams and saves generated audio to `/tmp`.
+- Streams audio live as it generates — nothing is written to disk.
 - The correct `lang_code` is inferred from the voice prefix (`a*` → American,
   `b*` → British).
+
+### Voice modes: always-on and verbose
+
+`/pst:tts` takes optional mode arguments so the assistant can keep talking
+throughout a session instead of only when asked:
+
+| Command | What it does |
+|---|---|
+| `/pst:tts` | Summarize + speak once (default). |
+| `/pst:tts verbose` | Narrate the current task aloud (one-shot). |
+| `/pst:tts always` | Speak a short summary at the end of every turn. |
+| `/pst:tts always verbose` | Continuous spoken companion — narrates as it works. |
+| `/pst:tts off` | Turn always-mode off. |
+
+Always-mode is **session-scoped**: it applies to the current conversation only
+and is cleared automatically when the session ends. State lives in
+`${XDG_CONFIG_HOME:-~/.config}/pst/voice/`. A `UserPromptSubmit` hook keeps the
+mode active each turn (it never speaks — the assistant authors all audio), so
+existing installs must run `/reload-plugins` once to pick up the hooks.
 
 ### Comparing model quality
 
@@ -82,7 +111,21 @@ tts-compare -f                  # force regeneration even if cached
 
 ## Setting up the TTS engine (mlx-audio)
 
-`pst` depends on `mlx-audio`. Install it as a `uv` tool from git `main` (required
+The recommended path is the [`pst-setup`](bin/pst-setup) script — run it in
+Claude Code as `/pst:setup`, or directly:
+
+```bash
+pst-setup
+```
+
+It's idempotent (safe to re-run, doubles as a repair command) and does exactly
+what the manual steps below do. It requires [`uv`](https://github.com/astral-sh/uv)
+and tells you how to install it if it's missing.
+
+<details>
+<summary>What it runs (manual equivalent)</summary>
+
+`pst` depends on `mlx-audio`, installed as a `uv` tool from git `main` (required
 for the 4bit model — PyPI 0.4.2 lacks the fix for loading quantized checkpoints):
 
 ```bash
@@ -92,7 +135,7 @@ uv tool install --force git+https://github.com/Blaizzy/mlx-audio.git \
   --with "spacy>=3.7,<4" --with pip
 
 # Download the spaCy English model into the tool's env:
-~/.local/share/uv/tools/mlx-audio/bin/python -m spacy download en_core_web_sm
+"$(uv tool dir)/mlx-audio/bin/python" -m spacy download en_core_web_sm
 ```
 
 > **Note:** do *not* add `--with phonemizer`. `misaki[en]` already pulls in
@@ -100,11 +143,15 @@ uv tool install --force git+https://github.com/Blaizzy/mlx-audio.git \
 > shared `phonemizer/` directory and breaks misaki with
 > `AttributeError: 'EspeakWrapper' has no attribute 'set_data_path'`.
 
-Then put `bin/` on your `PATH`:
+</details>
 
-```bash
-export PATH="$HOME/c/pst/bin:$PATH"
-```
+> **Running `tts` outside Claude Code?** The plugin puts `bin/` on the Bash
+> tool's `PATH` automatically, so no setup is needed for `/pst:tts`. To call
+> `tts` from your own terminal too, add `bin/` to your shell `PATH`:
+>
+> ```bash
+> export PATH="$HOME/c/pst/bin:$PATH"
+> ```
 
 ## Requirements
 

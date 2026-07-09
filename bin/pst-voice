@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# pst-voice — read/write the session-scoped voice-mode state file.
+#
+# State file: ${XDG_CONFIG_HOME:-$HOME/.config}/pst/voice/<session-id>
+#   Presence  = always-on voice mode is ON.
+#   Contents  = space-separated tokens: "always" or "always verbose".
+#
+# Session id comes from $PST_SESSION_ID (override, used by hooks/tests) or
+# $CLAUDE_CODE_SESSION_ID (set by Claude Code). Single source of truth for the
+# path so the /pst:tts skill and the plugin hooks always agree.
+set -euo pipefail
+
+config_root() { printf '%s' "${XDG_CONFIG_HOME:-$HOME/.config}/pst/voice"; }
+session_id()  { printf '%s' "${PST_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"; }
+
+state_file() {
+  local sid; sid="$(session_id)"
+  [[ -n "$sid" ]] || return 1
+  printf '%s/%s' "$(config_root)" "$sid"
+}
+
+cmd="${1:-}"; shift || true
+
+case "$cmd" in
+  set)
+    file="$(state_file)" || { echo "pst-voice: no session id (set \$CLAUDE_CODE_SESSION_ID)" >&2; exit 1; }
+    mkdir -p "$(dirname "$file")"
+    printf '%s\n' "$*" > "$file"
+    ;;
+  get)
+    file="$(state_file)" 2>/dev/null || exit 0
+    [[ -f "$file" ]] || exit 0
+    # trim trailing newline/whitespace
+    tr -d '\n' < "$file" | sed 's/[[:space:]]*$//'
+    ;;
+  status)
+    file="$(state_file)" 2>/dev/null || { echo off; exit 0; }
+    if [[ -f "$file" ]]; then tr -d '\n' < "$file" | sed 's/[[:space:]]*$//'; echo; else echo off; fi
+    ;;
+  clear)
+    file="$(state_file)" 2>/dev/null || exit 0
+    rm -f "$file"
+    ;;
+  *)
+    echo "usage: pst-voice {set <tokens...>|get|status|clear}" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# SessionEnd hook — delete this session's voice-mode state so the mode is
+# strictly session-only and never leaks into a future conversation.
+set -euo pipefail
+
+input="$(cat)"
+sid="${CLAUDE_CODE_SESSION_ID:-}"
+if [[ -z "$sid" ]]; then
+  sid="$(printf '%s' "$input" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+fi
+export PST_SESSION_ID="$sid"
+
+helper="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/bin/pst-voice"
+"$helper" clear 2>/dev/null || true
+exit 0

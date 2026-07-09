@@ -1,7 +1,7 @@
 {
   "name": "pst",
   "description": "Local-first speech tooling optimized for macOS (text-to-speech and speech-to-text). Runs on-device (Apple Silicon): ships TTS today via mlx-audio + Kokoro, with STT, a voice conversation loop, wake word, and voice cloning on the roadmap.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "Josh Medeski"
   },

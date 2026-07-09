@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# UserPromptSubmit hook — if always-on voice mode is active for this session,
+# inject a reminder telling the agent to speak this turn. Never speaks itself.
+set -euo pipefail
+
+input="$(cat)"  # drain + capture hook JSON from stdin
+
+# Resolve session id: prefer the env var, else parse it out of the JSON.
+sid="${CLAUDE_CODE_SESSION_ID:-}"
+if [[ -z "$sid" ]]; then
+  sid="$(printf '%s' "$input" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+fi
+export PST_SESSION_ID="$sid"
+
+helper="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/bin/pst-voice"
+state="$("$helper" get 2>/dev/null || true)"
+
+[[ -n "$state" ]] || exit 0  # off -> emit nothing
+
+if [[ "$state" == *verbose* ]]; then
+  cat <<'EOF'
+[pst voice] Always-on voice mode is ACTIVE (verbose). Narrate your work with the `tts` binary as you work this turn (run it with run_in_background:true and NO trailing &): provide a one-line spoken opener of your plan, a short spoken note at each significant decision or whenever you change approach, and a one-sentence spoken wrap-up at the end. Keep each utterance to one short, natural sentence. Avoid file paths, code, and markdown in spoken text; say "id" as "eye-dee" and "Nutiliti" as "newtility".
+EOF
+else
+  cat <<'EOF'
+[pst voice] Always-on voice mode is ACTIVE (terse). At the end of this turn, speak a concise one-to-three sentence spoken summary of what happened with the `tts` binary (run it with run_in_background:true and NO trailing &). Avoid file paths, code, and markdown in spoken text; say "id" as "eye-dee" and "Nutiliti" as "newtility".
+EOF
+fi
+exit 0

@@ -67,6 +67,25 @@ tts --help
 - The correct `lang_code` is inferred from the voice prefix (`a*` → American,
   `b*` → British).
 
+### Voice modes: always-on and verbose
+
+`/pst:tts` takes optional mode arguments so the assistant can keep talking
+throughout a session instead of only when asked:
+
+| Command | What it does |
+|---|---|
+| `/pst:tts` | Summarize + speak once (default). |
+| `/pst:tts verbose` | Narrate the current task aloud (one-shot). |
+| `/pst:tts always` | Speak a short summary at the end of every turn. |
+| `/pst:tts always verbose` | Continuous spoken companion — narrates as it works. |
+| `/pst:tts off` | Turn always-mode off. |
+
+Always-mode is **session-scoped**: it applies to the current conversation only
+and is cleared automatically when the session ends. State lives in
+`${XDG_CONFIG_HOME:-~/.config}/pst/voice/`. A `UserPromptSubmit` hook keeps the
+mode active each turn (it never speaks — the assistant authors all audio), so
+existing installs must run `/reload-plugins` once to pick up the hooks.
+
 ### Comparing model quality
 
 [`bin/tts-compare`](bin/tts-compare) generates the same sentence across the

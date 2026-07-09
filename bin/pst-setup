@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# pst-setup — install (or repair) the on-device tooling that `tts` depends on.
+#
+# Idempotent: safe to re-run. Uses `uv tool install --force`, so re-running
+# upgrades/repairs the mlx-audio tool in place.
+#
+# What it installs:
+#   mlx-audio (from git main) + the deps Kokoro needs, then the spaCy English
+#   model into the tool's env.
+#
+# Why git main (not PyPI): the 4bit Kokoro model needs PR #624, which fixes
+# quantized checkpoint loading. PyPI 0.4.2 lacks it. Switch back to `mlx-audio`
+# from PyPI once 0.4.3 ships.
+#
+# Why no `--with phonemizer`: misaki[en] already pulls in phonemizer-fork (it
+# has the EspeakWrapper.set_data_path API misaki calls). Installing plain
+# phonemizer alongside it races on the shared phonemizer/ dir and breaks misaki
+# with: AttributeError: 'EspeakWrapper' has no attribute 'set_data_path'.
+set -euo pipefail
+
+info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+err()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; }
+
+# 1. Require uv (do not silently curl|sh an installer).
+if ! command -v uv >/dev/null 2>&1; then
+  err "uv is not installed."
+  cat >&2 <<'EOF'
+
+pst uses uv to manage the mlx-audio tool. Install uv, then re-run pst-setup:
+
+  brew install uv                              # Homebrew
+  curl -LsSf https://astral.sh/uv/install.sh | sh   # official installer
+
+Docs: https://github.com/astral-sh/uv
+EOF
+  exit 1
+fi
+
+# 2. Install/upgrade the mlx-audio tool.
+info "Installing mlx-audio (git main) as a uv tool…"
+uv tool install --force git+https://github.com/Blaizzy/mlx-audio.git \
+  --prerelease=allow --with "misaki[en]" --with num2words \
+  --with espeakng-loader --with "numpy>=1.26,<2" \
+  --with "spacy>=3.7,<4" --with pip
+
+# 3. Download the spaCy English model into the tool's own env.
+#    (`uv tool run` would create an ephemeral env without spacy, so invoke the
+#    tool's python directly.)
+info "Downloading the spaCy English model into the tool env…"
+TOOL_DIR="$(uv tool dir 2>/dev/null || echo "$HOME/.local/share/uv/tools")"
+TOOL_PY="$TOOL_DIR/mlx-audio/bin/python"
+if [[ ! -x "$TOOL_PY" ]]; then
+  err "Could not find the mlx-audio tool python at: $TOOL_PY"
+  err "Install may have failed above. Re-run pst-setup or check 'uv tool list'."
+  exit 1
+fi
+"$TOOL_PY" -m spacy download en_core_web_sm
+
+# 4. Verify.
+info "Verifying…"
+if uv tool list | grep -q mlx-audio; then
+  uv tool list | grep mlx-audio
+  info "Done. TTS is ready — try:  tts \"hello world\""
+else
+  err "mlx-audio not found in 'uv tool list' after install."
+  exit 1
+fi

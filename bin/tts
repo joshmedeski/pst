@@ -4,26 +4,9 @@
 #   PyPI:         https://pypi.org/project/mlx-audio/
 #   Kokoro model: https://huggingface.co/mlx-community/Kokoro-82M-4bit
 #
-# Install / Upgrade — install from git main (required for the 4bit model below;
-# PyPI 0.4.2 lacks PR #624 which fixes quantized checkpoint loading. Switch
-# back to `mlx-audio` from PyPI once 0.4.3 ships).
-#   uv tool install --force git+https://github.com/Blaizzy/mlx-audio.git \
-#     --prerelease=allow --with "misaki[en]" --with num2words \
-#     --with espeakng-loader --with "numpy>=1.26,<2" \
-#     --with "spacy>=3.7,<4" --with pip
-#
-# NOTE: do NOT add `--with phonemizer` — `misaki[en]` already pulls in
-# `phonemizer-fork` (has the `EspeakWrapper.set_data_path` API misaki calls).
-# Installing plain `phonemizer` alongside it is a file-write race in the shared
-# `phonemizer/` dir and can break misaki with:
-#   AttributeError: 'EspeakWrapper' has no attribute 'set_data_path'
-#
-# Then download the spaCy model into the tool's env (uv tool run creates an
-# ephemeral env without spacy, so invoke the tool's python directly):
-#   ~/.local/share/uv/tools/mlx-audio/bin/python -m spacy download en_core_web_sm
-#
-# Verify:
-#   uv tool list | grep mlx-audio
+# Install / Upgrade — run `pst-setup` (or `/pst:setup` in Claude Code). It is the
+# single source of truth for the exact uv tool install (git main required for the
+# 4bit model, the no-`phonemizer` rule, and the spaCy model download).
 set -euo pipefail
 
 # Known Kokoro-82M English voices (source of truth for both --voices and validation).
@@ -111,15 +94,13 @@ fi
 TEXT="${TEXT_PARTS[*]}"
 # lang_code follows the voice prefix (a* -> American, b* -> British).
 LANG_CODE="${VOICE:0:1}"
-TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 
+# --stream plays the audio live as it generates. We intentionally omit --save
+# (and its --output_path/--file_prefix): playback is all we need, no files.
 mlx_audio.tts.generate \
   --model mlx-community/Kokoro-82M-4bit \
   --text "$TEXT" \
   --voice "$VOICE" \
   --speed 1.0 \
   --lang_code "$LANG_CODE" \
-  --output_path /tmp \
-  --file_prefix "tts_${TIMESTAMP}" \
-  --stream \
-  --save
+  --stream

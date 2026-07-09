@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Project:
+#   mlx-audio:    https://github.com/Blaizzy/mlx-audio
+#   PyPI:         https://pypi.org/project/mlx-audio/
+#   Kokoro model: https://huggingface.co/mlx-community/Kokoro-82M-4bit
+#
+# Install / Upgrade — install from git main (required for the 4bit model below;
+# PyPI 0.4.2 lacks PR #624 which fixes quantized checkpoint loading. Switch
+# back to `mlx-audio` from PyPI once 0.4.3 ships).
+#   uv tool install --force git+https://github.com/Blaizzy/mlx-audio.git \
+#     --prerelease=allow --with "misaki[en]" --with num2words \
+#     --with espeakng-loader --with "numpy>=1.26,<2" \
+#     --with "spacy>=3.7,<4" --with pip
+#
+# NOTE: do NOT add `--with phonemizer` — `misaki[en]` already pulls in
+# `phonemizer-fork` (has the `EspeakWrapper.set_data_path` API misaki calls).
+# Installing plain `phonemizer` alongside it is a file-write race in the shared
+# `phonemizer/` dir and can break misaki with:
+#   AttributeError: 'EspeakWrapper' has no attribute 'set_data_path'
+#
+# Then download the spaCy model into the tool's env (uv tool run creates an
+# ephemeral env without spacy, so invoke the tool's python directly):
+#   ~/.local/share/uv/tools/mlx-audio/bin/python -m spacy download en_core_web_sm
+#
+# Verify:
+#   uv tool list | grep mlx-audio
+set -euo pipefail
+
+# Known Kokoro-82M English voices (source of truth for both --voices and validation).
+AMERICAN_FEMALE=(af_alloy af_aoede af_bella af_heart af_jessica af_kore af_nicole af_nova af_river af_sarah af_sky)
+AMERICAN_MALE=(am_adam am_echo am_eric am_fenrir am_liam am_michael am_onyx am_puck am_santa)
+BRITISH_FEMALE=(bf_alice bf_emma bf_isabella bf_lily)
+BRITISH_MALE=(bm_daniel bm_fable bm_george bm_lewis)
+VOICES=("${AMERICAN_FEMALE[@]}" "${AMERICAN_MALE[@]}" "${BRITISH_FEMALE[@]}" "${BRITISH_MALE[@]}")
+
+DEFAULT_VOICE="af_heart"
+
+usage() {
+  cat <<EOF
+Usage: tts [--voice <name>] <text>
+
+Speak text aloud using Kokoro TTS (mlx-audio).
+
+Options:
+  --voice <name>   Voice to use (default: ${DEFAULT_VOICE}). See --voices.
+  --voices         List available voices grouped by language.
+  -h, --help       Show this help.
+
+Examples:
+  tts "hello world"
+  tts --voice bm_george "good evening"
+EOF
+}
+
+list_voices() {
+  printf '\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 American female (af_): %s\n' "${AMERICAN_FEMALE[*]}"
+  printf '\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 American male   (am_): %s\n' "${AMERICAN_MALE[*]}"
+  printf '\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7 British female  (bf_): %s\n' "${BRITISH_FEMALE[*]}"
+  printf '\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7 British male    (bm_): %s\n' "${BRITISH_MALE[*]}"
+  printf '\nDefault: %s\n' "${DEFAULT_VOICE}"
+}
+
+is_valid_voice() {
+  local candidate="$1"
+  for v in "${VOICES[@]}"; do
+    [[ "$v" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+VOICE="$DEFAULT_VOICE"
+TEXT_PARTS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --voices)
+      list_voices
+      exit 0
+      ;;
+    --voice)
+      [[ $# -ge 2 ]] || { echo "tts: --voice requires a value (see: tts --voices)" >&2; exit 1; }
+      VOICE="$2"
+      shift 2
+      ;;
+    --voice=*)
+      VOICE="${1#--voice=}"
+      shift
+      ;;
+    *)
+      TEXT_PARTS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if ! is_valid_voice "$VOICE"; then
+  echo "tts: unknown voice '$VOICE'. Run 'tts --voices' to see available voices." >&2
+  exit 1
+fi
+
+if [[ ${#TEXT_PARTS[@]} -eq 0 ]]; then
+  echo "tts: no text provided." >&2
+  usage >&2
+  exit 1
+fi
+
+TEXT="${TEXT_PARTS[*]}"
+# lang_code follows the voice prefix (a* -> American, b* -> British).
+LANG_CODE="${VOICE:0:1}"
+TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+
+mlx_audio.tts.generate \
+  --model mlx-community/Kokoro-82M-4bit \
+  --text "$TEXT" \
+  --voice "$VOICE" \
+  --speed 1.0 \
+  --lang_code "$LANG_CODE" \
+  --output_path /tmp \
+  --file_prefix "tts_${TIMESTAMP}" \
+  --stream \
+  --save

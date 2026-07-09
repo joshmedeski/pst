@@ -1,0 +1,11 @@
+{
+  "name": "pst",
+  "description": "Local-first, on-device voice toolkit for macOS (Apple Silicon). Ships text-to-speech today via mlx-audio + Kokoro, with speech-to-text, a voice conversation loop, wake word, and voice cloning on the roadmap.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Josh Medeski"
+  },
+  "homepage": "https://github.com/joshmedeski/pst",
+  "repository": "https://github.com/joshmedeski/pst",
+  "license": "MIT"
+}

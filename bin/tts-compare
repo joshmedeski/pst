@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Project:
+#   mlx-audio:     https://github.com/Blaizzy/mlx-audio
+#   Kokoro models: https://huggingface.co/collections/mlx-community/kokoro-tts
+#
+# Compare Kokoro TTS quantization variants (bf16, 8bit, 6bit, 4bit) by
+# generating the same sentence with each. Each sample self-labels so you can
+# identify the variant by ear. First run downloads the smaller models
+# (~80–160MB each); subsequent runs replay cached audio instantly.
+#
+# Usage:
+#   tts-compare                     # generate (if missing) and play all 4
+#   tts-compare "custom body text"  # override body; regenerates
+#   tts-compare -f                  # force regeneration even if cached
+set -euo pipefail
+
+DEFAULT_BODY="The quick brown fox jumps over the lazy dog, while the sleepy cat watched from the windowsill, curious but unbothered."
+
+FORCE=0
+BODY=""
+for arg in "$@"; do
+  case "$arg" in
+    -f|--force) FORCE=1 ;;
+    *)          BODY="$arg" ;;
+  esac
+done
+
+if [[ -n "$BODY" ]]; then
+  FORCE=1
+else
+  BODY="$DEFAULT_BODY"
+fi
+
+QUANTS=(bf16 8bit 6bit 4bit)
+declare -A LABELS=(
+  [bf16]="B float sixteen precision"
+  [8bit]="eight bit quantization"
+  [6bit]="six bit quantization"
+  [4bit]="four bit quantization"
+)
+
+OUT_DIR="/tmp"
+
+if [[ "$FORCE" == "1" ]]; then
+  echo "Force mode: clearing cached samples…"
+  rm -f "$OUT_DIR"/kokoro_compare_*.wav
+fi
+
+for QUANT in "${QUANTS[@]}"; do
+  PREFIX="kokoro_compare_${QUANT}"
+  OUT_FILE="${OUT_DIR}/${PREFIX}_000.wav"
+  echo
+  echo "=== ${QUANT} ==="
+
+  if [[ -f "$OUT_FILE" ]]; then
+    echo "cached, playing ${OUT_FILE}"
+    afplay "$OUT_FILE"
+  else
+    TEXT="This is the Kokoro speech model using ${LABELS[$QUANT]}. ${BODY}"
+    echo "generating…"
+    mlx_audio.tts.generate \
+      --model "mlx-community/Kokoro-82M-${QUANT}" \
+      --text "$TEXT" \
+      --voice af_heart \
+      --speed 1.0 \
+      --lang_code a \
+      --output_path "$OUT_DIR" \
+      --file_prefix "$PREFIX" \
+      --play
+  fi
+done
+
+echo
+echo "Samples:"
+for QUANT in "${QUANTS[@]}"; do
+  echo "  $OUT_DIR/kokoro_compare_${QUANT}_000.wav"
+done

@@ -195,3 +195,19 @@ can land one at a time.
 | **Tone / speech style** | 🔜 Planned | Select a delivery style (e.g. calm, upbeat, terse, narrator) so the same text can be spoken to match the moment. |
 | **Contextual voice chooser** | 🔜 Planned | Automatically pick voice + tone from context — e.g. a distinct voice for errors vs. summaries vs. code, or per project — without asking. |
 | **Voice cloning** | 🔜 Planned | Generate speech in a custom, user-provided voice. |
+
+### Playback & orchestration
+
+Making speech behave when more than one thing wants to talk at once — across
+long outputs, concurrent sessions, and multiple projects. The unifying
+primitive is a **serialized playback queue**: a single global speaker that plays
+one utterance at a time, in order, and never overlaps itself. The features below
+are behaviors layered on that queue.
+
+| Feature | Status | What it does |
+|---------|--------|--------------|
+| **Serialized playback queue** | 🔜 Planned | One global speaker, FIFO, one utterance at a time. The core primitive the rest build on — nothing ever plays over anything else. |
+| **Sectioned playback** | 🔜 Planned | Break a large output (big plan, code walkthrough, dashboard summary) into ordered chunks and speak them back-to-back through the queue, so long content is delivered section by section without the voice overlapping itself. |
+| **Cross-session audio lock** | 🔜 Planned | A machine-wide lock so multiple projects / Claude sessions with TTS on don't speak over each other — the queue is shared across processes, not per-session. |
+| **Per-project voices** | 🔜 Planned | Assign a distinct Kokoro voice per project so you can tell at a glance (by ear) which project is talking. |
+| **Project-handoff announcements** | 🔜 Planned | When the next queued utterance belongs to a different project than the one just spoken, prepend a spoken identity cue first — e.g. "Back in the Nutiliti project…" — so context switches are never ambiguous. |

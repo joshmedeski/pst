@@ -14,7 +14,9 @@ AMERICAN_FEMALE=(af_alloy af_aoede af_bella af_heart af_jessica af_kore af_nicol
 AMERICAN_MALE=(am_adam am_echo am_eric am_fenrir am_liam am_michael am_onyx am_puck am_santa)
 BRITISH_FEMALE=(bf_alice bf_emma bf_isabella bf_lily)
 BRITISH_MALE=(bm_daniel bm_fable bm_george bm_lewis)
-VOICES=("${AMERICAN_FEMALE[@]}" "${AMERICAN_MALE[@]}" "${BRITISH_FEMALE[@]}" "${BRITISH_MALE[@]}")
+SPANISH_FEMALE=(ef_dora)
+SPANISH_MALE=(em_alex em_santa)
+VOICES=("${AMERICAN_FEMALE[@]}" "${AMERICAN_MALE[@]}" "${BRITISH_FEMALE[@]}" "${BRITISH_MALE[@]}" "${SPANISH_FEMALE[@]}" "${SPANISH_MALE[@]}")
 
 DEFAULT_VOICE="af_heart"
 
@@ -40,6 +42,8 @@ list_voices() {
   printf '\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 American male   (am_): %s\n' "${AMERICAN_MALE[*]}"
   printf '\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7 British female  (bf_): %s\n' "${BRITISH_FEMALE[*]}"
   printf '\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7 British male    (bm_): %s\n' "${BRITISH_MALE[*]}"
+  printf '\xF0\x9F\x87\xAA\xF0\x9F\x87\xB8 Spanish female  (ef_): %s\n' "${SPANISH_FEMALE[*]}"
+  printf '\xF0\x9F\x87\xAA\xF0\x9F\x87\xB8 Spanish male    (em_): %s\n' "${SPANISH_MALE[*]}"
   printf '\nDefault: %s\n' "${DEFAULT_VOICE}"
 }
 

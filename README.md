@@ -11,10 +11,15 @@ no cloud, no API keys, no per-character billing — powered by
 [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-4bit) model running
 on Apple's MLX framework.
 
+It also does **[voice cloning](#voice-cloning-speak-in-your-own-voice)** — speak
+in your own voice from a short reference recording you supply, still entirely
+on-device.
+
 Installed as a Claude Code plugin, it exposes the `tts` skill as **`/pst:tts`**
-(and the agent triggers it automatically when you ask it to "read that back" or
-"say that out loud"). The `pst:` namespace is the umbrella for the voice skills
-on the [roadmap](#roadmap) — `/pst:stt`, `/pst:converse`, and more.
+and cloning as **`/pst:tts-clone`** (and the agent triggers them automatically
+when you ask it to "read that back" or "say that in my voice"). The `pst:`
+namespace is the umbrella for the voice skills on the [roadmap](#roadmap) —
+`/pst:stt`, `/pst:converse`, and more.
 
 ## Install as a Claude Code plugin
 
@@ -26,9 +31,9 @@ Claude Code:
 /plugin install pst@pst
 ```
 
-That's it — the `tts` skill is now available as `/pst:tts`, and the `bin/`
-scripts (`tts`, `tts-compare`) are on the Bash `PATH` while the plugin is
-enabled.
+That's it — the `tts` and `tts-clone` skills are now available as `/pst:tts` and
+`/pst:tts-clone`, and the `bin/` scripts (`tts`, `tts-clone`, `tts-compare`) are
+on the Bash `PATH` while the plugin is enabled.
 
 > **Prerequisite:** the skill shells out to the local `tts` binary, which needs
 > the `mlx-audio` engine. Run the one-time setup first:
@@ -71,8 +76,8 @@ tts --voices          # list available voices, grouped by language
 tts --help
 ```
 
-- **28 voices** across American/British and female/male, e.g. `af_heart`
-  (default), `am_michael`, `bf_emma`, `bm_george`.
+- **31 voices** across American/British/Spanish and female/male, e.g. `af_heart`
+  (default), `am_michael`, `bf_emma`, `bm_george`, `ef_dora`.
 - Streams audio live as it generates — nothing is written to disk.
 - The correct `lang_code` is inferred from the voice prefix (`a*` → American,
   `b*` → British).
@@ -108,6 +113,93 @@ tts-compare                     # generate (if missing) and play all four
 tts-compare "custom body text"  # override the sentence; regenerates
 tts-compare -f                  # force regeneration even if cached
 ```
+
+## Voice cloning: speak in your own voice
+
+[`bin/tts-clone`](bin/tts-clone) speaks text in a voice cloned from a recording
+you supply, instead of Kokoro's stock voice table. It stays on-device like
+everything else here, using
+[Chatterbox](https://huggingface.co/mlx-community/Chatterbox-TTS-fp16) through
+`mlx-audio`.
+
+```bash
+tts-clone "the build passed"
+tts-clone --voice josh "twelve files changed"
+tts-clone --voices              # list installed voices
+tts-clone --set-default josh    # remember a default for this machine
+tts-clone --help
+```
+
+In Claude Code it's the **`/pst:tts-clone`** skill — ask the assistant to "say
+that in my voice" and it triggers automatically.
+
+### Your voice never enters this repo
+
+Voices live in your XDG config directory, deliberately outside the checkout:
+
+```
+${XDG_CONFIG_HOME:-~/.config}/pst/voices/<name>.wav   # reference audio
+${XDG_CONFIG_HOME:-~/.config}/pst/voices/<name>.txt   # its exact transcript
+```
+
+Nothing about a voice is committable, and no contributor's voice name appears in
+a tracked file — so installing or forking `pst` never means handing over your
+voice. There's no `.gitignore` rule for this because nothing ever lands in the
+repo to ignore.
+
+> Worth being clear about the limit: this keeps your sample out of the repo. It
+> cannot stop someone from cloning a voice out of recordings you've already
+> published publicly.
+
+### Configure your own voice
+
+1. **Get a clean 15–20 second sample** of the voice talking continuously. Avoid
+   long pauses, music, and background noise, and normalize it to a healthy
+   level — a quiet or gappy reference clones noticeably worse. Mono 24 kHz WAV
+   works well.
+
+   `pst` does not ship tooling to produce this clip yet (see
+   [roadmap](#tts-refinements)) — record it yourself, or cut it out of existing
+   audio with `ffmpeg`.
+
+2. **Save it** as `<name>.wav` in the voices directory above, where `<name>` is
+   whatever you want to call the voice.
+
+3. **Save its exact transcript** beside it as `<name>.txt`. Chatterbox needs the
+   reference text to clone accurately, and `tts-clone` refuses to run without
+   it. Punctuation and capitalization make no measurable difference, so a plain
+   lowercase transcript from any speech-to-text tool is fine.
+
+4. **Set your default** (optional):
+
+   ```bash
+   tts-clone --set-default <name>
+   ```
+
+Step 4 only matters once you have more than one voice installed — with exactly
+one, `tts-clone` picks it automatically. The default is stored per machine in
+`${XDG_CONFIG_HOME:-~/.config}/pst/clone-voice`, never in the repo.
+
+Voice resolution order: `--voice` → `$PST_CLONE_VOICE` → the `--set-default`
+value → the only installed voice.
+
+### How it differs from `tts`
+
+| | `tts` (Kokoro) | `tts-clone` (Chatterbox) |
+|---|---|---|
+| Voice | 31 stock voices | one you supply |
+| Streaming | yes — audio starts right away | no — the whole file is generated first |
+| Delay before sound | none | ~5s, longer on the first run of a session |
+| Speaking rate | `--speed` honored | not supported |
+| Language | `lang_code` from the voice prefix | inherited from your reference audio |
+| Disk | nothing written | one temp file per run, removed on exit |
+
+Because of that delay, `tts` remains the right choice for always-on narration
+and running commentary. Reach for `tts-clone` when the voice itself is the point.
+
+> **First run** downloads the Chatterbox weights and an S3 tokenizer, so it takes
+> noticeably longer than later runs. The first clone in a session is also slower
+> than the rest, since the weights have to be read back from disk.
 
 ## Setting up the TTS engine (mlx-audio)
 
@@ -174,6 +266,7 @@ invoked independently or composed together.
 | Skill | Command | Status | What it does |
 |-------|---------|--------|--------------|
 | `tts` | `/pst:tts` | ✅ Available | Summarize + speak text aloud (Kokoro via mlx-audio). |
+| `tts-clone` | `/pst:tts-clone` | ✅ Available | Speak in your own voice, cloned from a reference recording (Chatterbox via mlx-audio). |
 | `stt` | `/pst:stt` | 🔜 Planned | Local, on-device transcription — talk *to* the machine, not just hear it talk back. |
 | `converse` | `/pst:converse` | 🔜 Planned | Full duplex voice loop (STT → agent → TTS), usable in parallel with other work. |
 | `wake-word` | — | 🔜 Planned | Hands-free local trigger ("hey pst") so the assistant listens only when summoned. |
@@ -194,7 +287,8 @@ can land one at a time.
 | **Pronunciation dictionary** | 🔜 Planned | A user-editable map of word → how-to-say-it, so terms like `id` → "eye-dee" or `Nutiliti` → "newtility" are always spoken correctly. Replaces today's ad-hoc rules baked into the skill. |
 | **Tone / speech style** | 🔜 Planned | Select a delivery style (e.g. calm, upbeat, terse, narrator) so the same text can be spoken to match the moment. |
 | **Contextual voice chooser** | 🔜 Planned | Automatically pick voice + tone from context — e.g. a distinct voice for errors vs. summaries vs. code, or per project — without asking. |
-| **Voice cloning** | 🔜 Planned | Generate speech in a custom, user-provided voice. |
+| **Voice cloning** | ✅ Available | Generate speech in a custom, user-provided voice — see [voice cloning](#voice-cloning-speak-in-your-own-voice). |
+| **Voice sample extraction** | 🔜 Planned | Tooling to build a clone reference from existing audio (find a clean continuous-speech window, normalize it, transcribe it) instead of preparing the WAV and transcript by hand. |
 
 ### Playback & orchestration
 

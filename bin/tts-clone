@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+# Project:
+#   mlx-audio:        https://github.com/Blaizzy/mlx-audio
+#   Chatterbox model: https://huggingface.co/mlx-community/Chatterbox-TTS-fp16
+#
+# Speak text in a cloned voice. Where `tts` picks from Kokoro's fixed voice
+# table, the voice here comes from a reference recording you supply -- so there
+# is no voice list in this file, only whatever is installed on this machine.
+#
+# Voices live OUTSIDE this repo, under:
+#   ${XDG_CONFIG_HOME:-~/.config}/pst/voices/<name>.wav   reference audio
+#   ${XDG_CONFIG_HOME:-~/.config}/pst/voices/<name>.txt   its transcript
+# That is deliberate: a voice sample is personal, and installing pst must never
+# mean handing someone else your voice. Nothing here is committable.
+#
+# Accent is inherited from the reference audio -- there is no language flag to
+# set. Chatterbox-TTS-fp16 is English-only, so an American reference yields
+# American English by construction.
+#
+# Install / Upgrade -- run `pst-setup` (or `/pst:setup` in Claude Code).
+set -euo pipefail
+
+VOICES_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pst/voices"
+
+# Which voice to use when none is named. This is per-user machine config, not
+# repo config: pst is open source and no contributor's voice name belongs in a
+# committed file. Set it with `tts-clone --set-default <name>`.
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/pst/clone-voice"
+
+# ---------------------------------------------------------------------------
+# Provider: everything Chatterbox-specific is confined to this block and
+# generate_raw() below, so swapping cloning backends stays a localized edit.
+# ---------------------------------------------------------------------------
+MODEL="mlx-community/Chatterbox-TTS-fp16"
+
+generate_raw() {
+  # generate_raw <ref_wav> <ref_text> <text> <out_dir> -> echoes wav path
+  local ref_wav="$1" ref_text="$2" text="$3" out_dir="$4"
+  mlx_audio.tts.generate \
+    --model "$MODEL" \
+    --text "$text" \
+    --ref_audio "$ref_wav" \
+    --ref_text "$ref_text" \
+    --output_path "$out_dir" \
+    --file_prefix out >&2
+  # mlx-audio names its output <file_prefix>_000.wav
+  printf '%s/out_000.wav' "$out_dir"
+}
+# ---------------------------------------------------------------------------
+
+usage() {
+  cat <<EOF
+Usage: tts-clone [--voice <name>] <text>
+
+Speak text in a cloned voice (Chatterbox via mlx-audio).
+
+Options:
+  --voice <name>       Voice to use. See resolution order below.
+  --voices             List installed voices.
+  --set-default <name> Remember <name> as this machine's default voice.
+  -h, --help           Show this help.
+
+Voice resolution order:
+  1. --voice
+  2. \$PST_CLONE_VOICE
+  3. the default set by --set-default
+  4. the only installed voice, if exactly one is installed
+
+Examples:
+  tts-clone "the build passed"
+  tts-clone --voice josh "twelve files changed"
+
+Add a voice by placing <name>.wav (a clean ~15-20s sample) and <name>.txt (its
+transcript) in ${VOICES_DIR}.
+EOF
+}
+
+installed_voices() {
+  [[ -d "$VOICES_DIR" ]] || return 0
+  for wav in "$VOICES_DIR"/*.wav; do
+    [[ -e "$wav" ]] || continue
+    basename "$wav" .wav
+  done
+}
+
+list_voices() {
+  local found=0
+  while IFS= read -r v; do
+    [[ -n "$v" ]] || continue
+    found=1
+    if [[ -f "$VOICES_DIR/$v.txt" ]]; then
+      printf '  %s\n' "$v"
+    else
+      printf '  %s  (no %s.txt -- unusable)\n' "$v" "$v"
+    fi
+  done < <(installed_voices)
+  if [[ "$found" == "0" ]]; then
+    printf 'No voices installed in %s\n' "$VOICES_DIR"
+  fi
+}
+
+VOICE="${PST_CLONE_VOICE:-}"
+SET_DEFAULT=""
+TEXT_PARTS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --voices)
+      list_voices
+      exit 0
+      ;;
+    --voice)
+      [[ $# -ge 2 ]] || { echo "tts-clone: --voice requires a value" >&2; exit 1; }
+      VOICE="$2"
+      shift 2
+      ;;
+    --voice=*)
+      VOICE="${1#--voice=}"
+      shift
+      ;;
+    --set-default)
+      [[ $# -ge 2 ]] || { echo "tts-clone: --set-default requires a voice name" >&2; exit 1; }
+      SET_DEFAULT="$2"
+      shift 2
+      ;;
+    --set-default=*)
+      SET_DEFAULT="${1#--set-default=}"
+      shift
+      ;;
+    --)
+      shift
+      TEXT_PARTS+=("$@")
+      break
+      ;;
+    --*)
+      # Without this, a stale flag (e.g. the removed --tempo) would fall through
+      # and get spoken aloud as if it were text. Use `--` to speak literal
+      # text that begins with a dash.
+      echo "tts-clone: unknown option '$1'" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      TEXT_PARTS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -n "$SET_DEFAULT" ]]; then
+  if [[ ! -f "$VOICES_DIR/$SET_DEFAULT.wav" ]]; then
+    echo "tts-clone: no such voice '$SET_DEFAULT' (expected $VOICES_DIR/$SET_DEFAULT.wav)" >&2
+    echo "Installed voices:" >&2
+    list_voices >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$CONFIG_FILE")"
+  printf '%s\n' "$SET_DEFAULT" > "$CONFIG_FILE"
+  printf "tts-clone: default voice set to '%s' (%s)\n" "$SET_DEFAULT" "$CONFIG_FILE"
+  exit 0
+fi
+
+# Resolve the voice: explicit flag / env, then this machine's configured
+# default, then the sole installed voice.
+if [[ -z "$VOICE" && -f "$CONFIG_FILE" ]]; then
+  VOICE="$(tr -d '[:space:]' < "$CONFIG_FILE")"
+fi
+if [[ -z "$VOICE" ]]; then
+  # No mapfile here: /bin/bash on macOS is 3.2 and hooks may not inherit a
+  # PATH with homebrew's bash 5.
+  AVAILABLE=()
+  while IFS= read -r v; do
+    [[ -n "$v" ]] && AVAILABLE+=("$v")
+  done < <(installed_voices)
+  case "${#AVAILABLE[@]}" in
+    0) echo "tts-clone: no voices installed in $VOICES_DIR" >&2; exit 1 ;;
+    1) VOICE="${AVAILABLE[0]}" ;;
+    *) echo "tts-clone: multiple voices installed, pass --voice. Available:" >&2
+       list_voices >&2
+       exit 1 ;;
+  esac
+fi
+
+REF_WAV="$VOICES_DIR/$VOICE.wav"
+REF_TXT="$VOICES_DIR/$VOICE.txt"
+
+if [[ ! -f "$REF_WAV" ]]; then
+  echo "tts-clone: no such voice '$VOICE' (expected $REF_WAV)" >&2
+  echo "Installed voices:" >&2
+  list_voices >&2
+  exit 1
+fi
+if [[ ! -f "$REF_TXT" ]]; then
+  echo "tts-clone: voice '$VOICE' has no transcript at $REF_TXT" >&2
+  echo "Chatterbox needs the reference text to clone accurately." >&2
+  exit 1
+fi
+
+if [[ ${#TEXT_PARTS[@]} -eq 0 ]]; then
+  echo "tts-clone: no text provided." >&2
+  usage >&2
+  exit 1
+fi
+
+if ! command -v mlx_audio.tts.generate >/dev/null 2>&1; then
+  echo "tts-clone: mlx_audio.tts.generate not found -- run pst-setup" >&2
+  exit 1
+fi
+
+TEXT="${TEXT_PARTS[*]}"
+
+# Chatterbox cannot stream: it writes a complete file before anything can play.
+# So unlike `tts`, this script does own a temp file -- scoped to the run and
+# removed on exit.
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+RAW_WAV="$(generate_raw "$REF_WAV" "$(cat "$REF_TXT")" "$TEXT" "$TMP_DIR")"
+[[ -f "$RAW_WAV" ]] || { echo "tts-clone: generation produced no audio" >&2; exit 1; }
+
+afplay "$RAW_WAV"

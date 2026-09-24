@@ -1,6 +1,6 @@
 ---
 name: tts-clone
-description: Speak text aloud in the user's own cloned voice using the local tts-clone binary (Chatterbox via mlx-audio). Use when the user runs "/pst:tts-clone", says "say that in my voice", "read this back in my own voice", "use my cloned voice", or asks for spoken output in a cloned/custom voice rather than a stock one. For stock Kokoro voices and always-on voice modes, use the tts skill instead.
+description: Speak text aloud in the user's own cloned voice using the local tts-clone binary (Qwen3-TTS via mlx-audio). Use when the user runs "/pst:tts-clone", says "say that in my voice", "read this back in my own voice", "use my cloned voice", or asks for spoken output in a cloned/custom voice rather than a stock one. For stock Kokoro voices and always-on voice modes, use the tts skill instead.
 ---
 
 # TTS Clone - speak in a cloned voice
@@ -25,17 +25,14 @@ ALWAYS run `tts-clone` via the Bash tool with `run_in_background: true` and **no
 trailing `&`. A trailing `&` is redundant, trips a command-safety prompt, and
 fires the completion notification before the audio finishes playing.
 
-## Timing - this is not `tts`
+## Timing
 
-Unlike `tts`, Chatterbox **cannot stream**. It generates a complete file before
-any sound plays, so expect roughly:
+Like `tts`, Qwen3-TTS streams: playback starts while the rest is still
+generating. Expect a few seconds of silence first while the 1.7B model loads
+(longer on the first run, which downloads ~4 GB).
 
-- **~5s of silence** before playback begins (longer on the first run of a
-  session, which loads model weights from disk)
-- then playback of the generated audio
-
-Because of that delay, prefer `tts` for running narration and always-on voice
-modes. Reach for `tts-clone` when the voice itself is the point.
+Prefer `tts` for running narration and always-on voice modes. Reach for
+`tts-clone` when the voice itself is the point.
 
 ## When no voice is installed
 

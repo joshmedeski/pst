@@ -119,7 +119,7 @@ tts-compare -f                  # force regeneration even if cached
 [`bin/tts-clone`](bin/tts-clone) speaks text in a voice cloned from a recording
 you supply, instead of Kokoro's stock voice table. It stays on-device like
 everything else here, using
-[Chatterbox](https://huggingface.co/mlx-community/Chatterbox-TTS-fp16) through
+[Qwen3-TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16) through
 `mlx-audio`.
 
 ```bash
@@ -165,7 +165,7 @@ repo to ignore.
 2. **Save it** as `<name>.wav` in the voices directory above, where `<name>` is
    whatever you want to call the voice.
 
-3. **Save its exact transcript** beside it as `<name>.txt`. Chatterbox needs the
+3. **Save its exact transcript** beside it as `<name>.txt`. Qwen3-TTS needs the
    reference text to clone accurately, and `tts-clone` refuses to run without
    it. Punctuation and capitalization make no measurable difference, so a plain
    lowercase transcript from any speech-to-text tool is fine.
@@ -185,20 +185,20 @@ value → the only installed voice.
 
 ### How it differs from `tts`
 
-| | `tts` (Kokoro) | `tts-clone` (Chatterbox) |
+| | `tts` (Kokoro) | `tts-clone` (Qwen3-TTS) |
 |---|---|---|
 | Voice | 31 stock voices | one you supply |
-| Streaming | yes — audio starts right away | no — the whole file is generated first |
-| Delay before sound | none | ~5s, longer on the first run of a session |
+| Streaming | yes — audio starts right away | yes — after the model loads |
+| Delay before sound | none | a few seconds while the 1.7B model loads |
 | Speaking rate | `--speed` honored | not supported |
-| Language | `lang_code` from the voice prefix | inherited from your reference audio |
-| Disk | nothing written | one temp file per run, removed on exit |
+| Language | `lang_code` from the voice prefix | 10 languages, accent inherited from your reference audio |
+| Disk | nothing written | nothing written |
 
 Because of that delay, `tts` remains the right choice for always-on narration
 and running commentary. Reach for `tts-clone` when the voice itself is the point.
 
-> **First run** downloads the Chatterbox weights and an S3 tokenizer, so it takes
-> noticeably longer than later runs. The first clone in a session is also slower
+> **First run** downloads the ~4 GB Qwen3-TTS weights, so it takes noticeably
+> longer than later runs. The first clone in a session is also slower
 > than the rest, since the weights have to be read back from disk.
 
 ## Setting up the TTS engine (mlx-audio)
@@ -266,7 +266,7 @@ invoked independently or composed together.
 | Skill | Command | Status | What it does |
 |-------|---------|--------|--------------|
 | `tts` | `/pst:tts` | ✅ Available | Summarize + speak text aloud (Kokoro via mlx-audio). |
-| `tts-clone` | `/pst:tts-clone` | ✅ Available | Speak in your own voice, cloned from a reference recording (Chatterbox via mlx-audio). |
+| `tts-clone` | `/pst:tts-clone` | ✅ Available | Speak in your own voice, cloned from a reference recording (Qwen3-TTS via mlx-audio). |
 | `stt` | `/pst:stt` | 🔜 Planned | Local, on-device transcription — talk *to* the machine, not just hear it talk back. |
 | `converse` | `/pst:converse` | 🔜 Planned | Full duplex voice loop (STT → agent → TTS), usable in parallel with other work. |
 | `wake-word` | — | 🔜 Planned | Hands-free local trigger ("hey pst") so the assistant listens only when summoned. |

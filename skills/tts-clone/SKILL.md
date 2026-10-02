@@ -39,8 +39,8 @@ Prefer `tts` for running narration and always-on voice modes. Reach for
 `tts-clone` exits with `no voices installed` when the user has not set one up. Do
 not try to work around it or fall back to `tts` silently. Tell the user they need
 a reference recording installed at
-`${XDG_CONFIG_HOME:-~/.config}/pst/voices/<name>.wav` with its transcript
-alongside as `<name>.txt`, then `tts-clone --set-default <name>`.
+`${XDG_CONFIG_HOME:-~/.config}/pst/voices/<name>.wav`, then
+`tts-clone --set-default <name>`.
 
 Run `tts-clone --voices` to see what is installed.
 

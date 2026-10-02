@@ -9,7 +9,6 @@
 #
 # Voices live OUTSIDE this repo, under:
 #   ${XDG_CONFIG_HOME:-~/.config}/pst/voices/<name>.wav   reference audio
-#   ${XDG_CONFIG_HOME:-~/.config}/pst/voices/<name>.txt   its transcript
 # That is deliberate: a voice sample is personal, and installing pst must never
 # mean handing someone else your voice. Nothing here is committable.
 #
@@ -24,15 +23,24 @@ VOICES_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pst/voices"
 CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/pst/clone-voice"
 
 MODEL="mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
+TOOL_PY="$(uv tool dir 2>/dev/null || echo "$HOME/.local/share/uv/tools")/mlx-audio/bin/python"
 
 speak() {
-  local ref_wav="$1" ref_text="$2" text="$3"
-  mlx_audio.tts.generate \
-    --model "$MODEL" \
-    --text "$text" \
-    --ref_audio "$ref_wav" \
-    --ref_text "$ref_text" \
-    --stream
+  "$TOOL_PY" - "$MODEL" "$1" "$2" <<'EOF'
+import sys
+from mlx_audio.tts.audio_player import AudioPlayer
+from mlx_audio.tts.utils import load_model
+from mlx_audio.utils import load_audio
+
+model_id, ref_wav, text = sys.argv[1:]
+model = load_model(model_id)
+player = AudioPlayer(sample_rate=model.sample_rate)
+ref_audio = load_audio(ref_wav, sample_rate=model.sample_rate)
+for result in model.generate(text=text, ref_audio=ref_audio, stream=True):
+    player.queue_audio(result.audio)
+player.wait_for_drain()
+player.stop()
+EOF
 }
 
 usage() {
@@ -57,8 +65,7 @@ Examples:
   tts-clone "the build passed"
   tts-clone --voice josh "twelve files changed"
 
-Add a voice by placing <name>.wav (a clean ~15-20s sample) and <name>.txt (its
-transcript) in ${VOICES_DIR}.
+Add a voice by placing <name>.wav (a clean ~15-20s sample) in ${VOICES_DIR}.
 EOF
 }
 
@@ -75,11 +82,7 @@ list_voices() {
   while IFS= read -r v; do
     [[ -n "$v" ]] || continue
     found=1
-    if [[ -f "$VOICES_DIR/$v.txt" ]]; then
-      printf '  %s\n' "$v"
-    else
-      printf '  %s  (no %s.txt -- unusable)\n' "$v" "$v"
-    fi
+    printf '  %s\n' "$v"
   done < <(installed_voices)
   if [[ "$found" == "0" ]]; then
     printf 'No voices installed in %s\n' "$VOICES_DIR"
@@ -173,16 +176,11 @@ if [[ -z "$VOICE" ]]; then
 fi
 
 REF_WAV="$VOICES_DIR/$VOICE.wav"
-REF_TXT="$VOICES_DIR/$VOICE.txt"
 
 if [[ ! -f "$REF_WAV" ]]; then
   echo "tts-clone: no such voice '$VOICE' (expected $REF_WAV)" >&2
   echo "Installed voices:" >&2
   list_voices >&2
-  exit 1
-fi
-if [[ ! -f "$REF_TXT" ]]; then
-  echo "tts-clone: voice '$VOICE' has no transcript at $REF_TXT" >&2
   exit 1
 fi
 
@@ -192,11 +190,11 @@ if [[ ${#TEXT_PARTS[@]} -eq 0 ]]; then
   exit 1
 fi
 
-if ! command -v mlx_audio.tts.generate >/dev/null 2>&1; then
-  echo "tts-clone: mlx_audio.tts.generate not found -- run pst-setup" >&2
+if [[ ! -x "$TOOL_PY" ]]; then
+  echo "tts-clone: mlx-audio tool python not found at $TOOL_PY -- run pst-setup" >&2
   exit 1
 fi
 
 TEXT="${TEXT_PARTS[*]}"
 
-speak "$REF_WAV" "$(cat "$REF_TXT")" "$TEXT"
+speak "$REF_WAV" "$TEXT"

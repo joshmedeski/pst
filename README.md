@@ -139,7 +139,6 @@ Voices live in your XDG config directory, deliberately outside the checkout:
 
 ```
 ${XDG_CONFIG_HOME:-~/.config}/pst/voices/<name>.wav   # reference audio
-${XDG_CONFIG_HOME:-~/.config}/pst/voices/<name>.txt   # its exact transcript
 ```
 
 Nothing about a voice is committable, and no contributor's voice name appears in
@@ -165,18 +164,13 @@ repo to ignore.
 2. **Save it** as `<name>.wav` in the voices directory above, where `<name>` is
    whatever you want to call the voice.
 
-3. **Save its exact transcript** beside it as `<name>.txt`. Qwen3-TTS needs the
-   reference text to clone accurately, and `tts-clone` refuses to run without
-   it. Punctuation and capitalization make no measurable difference, so a plain
-   lowercase transcript from any speech-to-text tool is fine.
-
-4. **Set your default** (optional):
+3. **Set your default** (optional):
 
    ```bash
    tts-clone --set-default <name>
    ```
 
-Step 4 only matters once you have more than one voice installed — with exactly
+Step 3 only matters once you have more than one voice installed — with exactly
 one, `tts-clone` picks it automatically. The default is stored per machine in
 `${XDG_CONFIG_HOME:-~/.config}/pst/clone-voice`, never in the repo.
 
@@ -190,8 +184,8 @@ value → the only installed voice.
 | Voice | 31 stock voices | one you supply |
 | Streaming | yes — audio starts right away | yes — after the model loads |
 | Delay before sound | none | a few seconds while the 1.7B model loads |
-| Speaking rate | `--speed` honored | not supported |
-| Language | `lang_code` from the voice prefix | 10 languages, accent inherited from your reference audio |
+| Speaking rate | `--speed` honored | not supported; pauses follow punctuation |
+| Language | `lang_code` from the voice prefix | 10 languages |
 | Disk | nothing written | nothing written |
 
 Because of that delay, `tts` remains the right choice for always-on narration
@@ -288,7 +282,7 @@ can land one at a time.
 | **Tone / speech style** | 🔜 Planned | Select a delivery style (e.g. calm, upbeat, terse, narrator) so the same text can be spoken to match the moment. |
 | **Contextual voice chooser** | 🔜 Planned | Automatically pick voice + tone from context — e.g. a distinct voice for errors vs. summaries vs. code, or per project — without asking. |
 | **Voice cloning** | ✅ Available | Generate speech in a custom, user-provided voice — see [voice cloning](#voice-cloning-speak-in-your-own-voice). |
-| **Voice sample extraction** | 🔜 Planned | Tooling to build a clone reference from existing audio (find a clean continuous-speech window, normalize it, transcribe it) instead of preparing the WAV and transcript by hand. |
+| **Voice sample extraction** | 🔜 Planned | Tooling to build a clone reference from existing audio (find a clean continuous-speech window, normalize it) instead of preparing the WAV by hand. |
 
 ### Playback & orchestration
 

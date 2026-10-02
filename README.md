@@ -119,8 +119,9 @@ tts-compare -f                  # force regeneration even if cached
 [`bin/tts-clone`](bin/tts-clone) speaks text in a voice cloned from a recording
 you supply, instead of Kokoro's stock voice table. It stays on-device like
 everything else here, using
-[Qwen3-TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16) through
-`mlx-audio`.
+[Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) (the
+[1.7B Base MLX weights](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16))
+through `mlx-audio`.
 
 ```bash
 tts-clone "the build passed"
@@ -244,6 +245,12 @@ uv tool install --force git+https://github.com/Blaizzy/mlx-audio.git \
 - macOS on Apple Silicon (MLX is Apple-Silicon only)
 - [`uv`](https://github.com/astral-sh/uv)
 - `afplay` (ships with macOS) for playback
+
+## Resources
+
+- [mlx-audio](https://github.com/Blaizzy/mlx-audio) — the MLX speech engine behind both `tts` and `tts-clone`
+- [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-4bit) — the stock-voice model used by `tts`
+- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) — the voice-cloning model used by `tts-clone` ([MLX weights](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16))
 
 ## Roadmap
 

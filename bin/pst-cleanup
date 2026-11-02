@@ -4,7 +4,6 @@ set -euo pipefail
 HUB="${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface}/hub}"
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-KOKORO_KEEP="mlx-community/Kokoro-82M-4bit prince-canuma/Kokoro-82M"
 KOKORO_EXTRA="mlx-community/Kokoro-82M-bf16 mlx-community/Kokoro-82M-8bit mlx-community/Kokoro-82M-6bit"
 
 usage() {
@@ -14,11 +13,11 @@ Usage: pst-cleanup [--yes]
 Delete downloaded pst models you are not using, to free disk space.
 
 Kept:
-  - the Kokoro model used by tts (Kokoro-82M-4bit)
+  - the tts model currently in use (see: tts --models)
   - the tts-clone model currently in use (see: tts-clone --models)
 
 Removed (if downloaded):
-  - the other tts-clone models
+  - the other tts and tts-clone models
   - the Kokoro variants downloaded by tts-compare
 
 Only models pst downloads are considered; nothing else in
@@ -41,10 +40,13 @@ done
 
 cache_dir() { printf '%s/models--%s' "$HUB" "${1//\//--}"; }
 
+tts_models="$("$BIN_DIR/tts" --model-repos)"
 clone_models="$("$BIN_DIR/tts-clone" --models)"
-in_use="$(awk '$1 == "*" { print $2 }' <<<"$clone_models")"
-keep="$KOKORO_KEEP $(awk '$1 == "*" { for (i = 3; i <= NF; i++) print $i }' <<<"$clone_models")"
-candidates="$KOKORO_EXTRA $(awk '$1 != "*" { for (i = 2; i <= NF; i++) print $i }' <<<"$clone_models")"
+in_use_of() { awk '$1 == "*" { print $2 }' <<<"$1"; }
+keep_of() { awk '$1 == "*" { for (i = 3; i <= NF; i++) print $i }' <<<"$1"; }
+others_of() { awk '$1 != "*" { for (i = 2; i <= NF; i++) print $i }' <<<"$1"; }
+keep="$(keep_of "$tts_models") $(keep_of "$clone_models")"
+candidates="$(printf '%s\n' $KOKORO_EXTRA $(others_of "$tts_models") $(others_of "$clone_models") | awk '!seen[$0]++')"
 
 size_of() { du -sch "$@" | tail -1 | cut -f1; }
 
@@ -56,7 +58,8 @@ fi
 remove=()
 remove_dirs=()
 found=0
-echo "tts-clone model in use: $in_use"
+echo "tts model in use:       $(in_use_of "$tts_models")"
+echo "tts-clone model in use: $(in_use_of "$clone_models")"
 echo
 echo "pst models found in $HUB:"
 printf '  %6s  %-6s  %s\n' SIZE ACTION MODEL

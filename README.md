@@ -65,22 +65,54 @@ Then point Claude Code at the local marketplace and reload after edits:
 
 ## Main feature: text-to-speech with mlx-audio
 
-The [`bin/tts`](bin/tts) script speaks any text aloud using the Kokoro TTS model.
-Because everything runs locally through MLX, it's fast, private, and free to run
-as often as you like.
+The [`bin/tts`](bin/tts) script speaks any text aloud with a stock-voice model.
+Kokoro is the default; nine other models are a flag away. Because everything
+runs locally through MLX, it's fast, private, and free to run as often as you
+like.
 
 ```bash
 tts "hello world"
 tts --voice bm_george "good evening"
-tts --voices          # list available voices, grouped by language
+tts --voices                       # voices of the model in use
+tts --model pocket --voice marius "the build passed"
+tts --models                       # compare models; * marks the one in use
+tts --set-default-model qwen3-1.7b # remember a model for this machine
+tts --set-default aiden            # remember a voice for the model in use
 tts --help
 ```
 
-- **31 voices** across American/British/Spanish and female/male, e.g. `af_heart`
-  (default), `am_michael`, `bf_emma`, `bm_george`, `ef_dora`.
-- Streams audio live as it generates — nothing is written to disk.
-- The correct `lang_code` is inferred from the voice prefix (`a*` → American,
-  `b*` → British).
+- Streams audio live as it generates on models that support it; nothing is
+  written to disk.
+- Output volume is matched across models, so switching models doesn't change
+  how loud it is.
+
+### Choosing a model
+
+| Model | Voices | Langs | Params | Disk | Peak memory | Process start → first sound | Speed | License |
+|---|---|---|---|---|---|---|---|---|
+| `kokoro` (default) — [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-4bit) | 31 | 9 | 82M | 0.6 GB | 2.5 GB | 2.5 s | 43× | Apache-2.0 |
+| `kitten-nano` — [Kitten TTS nano](https://huggingface.co/mlx-community/kitten-tts-nano-0.8) | 8 | 1 | 15M | 0.06 GB | 1.8 GB | 0.8 s | 90× | Apache-2.0 |
+| `kitten-mini` — [Kitten TTS mini](https://huggingface.co/mlx-community/kitten-tts-mini-0.8) | 8 | 1 | 80M | 0.3 GB | 2.1 GB | 1.1 s | 24× | Apache-2.0 |
+| `pocket` — [Pocket TTS](https://huggingface.co/mlx-community/pocket-tts) | 8 | 1 | 100M | 0.2 GB | 1.0 GB | 1.9 s | 19× | CC-BY-4.0 |
+| `soprano` — [Soprano 1.1](https://huggingface.co/mlx-community/Soprano-1.1-80M-bf16) | 1 | 1 | 80M | 0.3 GB | 0.4 GB | 2.9 s | 18× | Apache-2.0 |
+| `melo` — [MeloTTS English v3](https://huggingface.co/mlx-community/MeloTTS-English-v3-MLX) | 1 | 1 | 50M | 0.6 GB | 1.3 GB | 5.7 s | 48× | MIT |
+| `vibevoice` — [VibeVoice Realtime 0.5B](https://huggingface.co/mlx-community/VibeVoice-Realtime-0.5B-8bit) | 25 | 11 | 0.5B | 1.1 GB | 3.9 GB | 3.6 s | 8× | MIT |
+| `qwen3-0.6b` — [Qwen3-TTS 0.6B CustomVoice](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit) | 9 | 10 | 0.6B | 1.8 GB | 3.8 GB | 2.6 s | 5× | Apache-2.0 |
+| `qwen3-1.7b` — [Qwen3-TTS 1.7B CustomVoice](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit) | 9 | 10 | 1.7B | 2.9 GB | 5.0 GB | 2.6 s | 4.5× | Apache-2.0 |
+| `voxtral` — [Voxtral 4B TTS](https://huggingface.co/mlx-community/Voxtral-4B-TTS-2603-mlx-4bit) | 20 | 9 | 4B | 2.4 GB | 3.4 GB | 3.1 s | 3.2× | CC-BY-NC-4.0 |
+
+Measured on an M4 Max (48 GB) with mlx-audio 0.4.4, one fresh process per
+call (as `tts` runs), speaking a three-sentence, ~11-second message; medians
+across 2–3 voices per model. Speed is warm generation in multiples of real
+time. `voxtral`'s weights are non-commercial.
+
+Model resolution order: `--model` → `$PST_TTS_MODEL` → the
+`--set-default-model` value (stored in
+`${XDG_CONFIG_HOME:-~/.config}/pst/tts-model`) → `kokoro`.
+
+Voice resolution order: `--voice` → `$PST_TTS_VOICE` → the `--set-default`
+value for that model (stored in `${XDG_CONFIG_HOME:-~/.config}/pst/tts-voice-<model>`)
+→ the model's default voice. A voice that the model doesn't have is an error.
 
 ### Voice modes: always-on and verbose
 
@@ -222,17 +254,17 @@ pst-cleanup         # list pst models on disk, their sizes, and ask before delet
 pst-cleanup --yes   # delete without asking
 ```
 
-It keeps the `tts-clone` model currently in use (resolved the same way as
-`tts-clone --models`) and the Kokoro model `tts` uses, and deletes the other
-cloning models plus any Kokoro variants `tts-compare` downloaded. Only models
+It keeps the `tts` and `tts-clone` models currently in use (resolved the same
+way as `tts --models` and `tts-clone --models`), and deletes the other models of
+both plus any Kokoro variants `tts-compare` downloaded. Only models
 pst downloads are considered — anything else in your Hugging Face cache is left
 alone. Deleted models re-download the next time you use them.
 
 ### How it differs from `tts`
 
-| | `tts` (Kokoro) | `tts-clone` |
+| | `tts` | `tts-clone` |
 |---|---|---|
-| Voice | 31 stock voices | one you supply |
+| Voice | stock voices (see `tts --models`) | one you supply |
 | Streaming | yes — audio starts right away | depends on the model (see above) |
 | Delay before sound | none | ~3–7 s, depending on the model |
 | Speaking rate | `--speed` honored | not supported; pauses follow punctuation |
@@ -264,7 +296,8 @@ for the 4bit model — PyPI 0.4.2 lacks the fix for loading quantized checkpoint
 uv tool install --force git+https://github.com/Blaizzy/mlx-audio.git \
   --prerelease=allow --with "misaki[en]" --with num2words \
   --with espeakng-loader --with "numpy>=1.26,<2" \
-  --with "spacy>=3.7,<4" --with pip
+  --with "spacy>=3.7,<4" --with pip \
+  --with "mistral-common[audio]" --with g2p_en
 
 # Download the spaCy English model into the tool's env:
 "$(uv tool dir)/mlx-audio/bin/python" -m spacy download en_core_web_sm
@@ -294,7 +327,7 @@ uv tool install --force git+https://github.com/Blaizzy/mlx-audio.git \
 ## Resources
 
 - [mlx-audio](https://github.com/Blaizzy/mlx-audio) — the MLX speech engine behind both `tts` and `tts-clone`
-- [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-4bit) — the stock-voice model used by `tts`
+- [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-4bit) — `tts`'s default stock-voice model; the others are linked in [Choosing a model](#choosing-a-model)
 - [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) — `tts-clone`'s default cloning model ([MLX weights](https://huggingface.co/mlx-community/VoxCPM2-bf16))
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) — streaming cloning model, `tts-clone --model qwen3` ([MLX weights](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16))
 - [MOSS-TTS-Nano](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M) — lightweight cloning model, `tts-clone --model moss-nano` ([MLX weights](https://huggingface.co/mlx-community/MOSS-TTS-Nano-100M))
@@ -313,7 +346,7 @@ invoked independently or composed together.
 
 | Skill | Command | Status | What it does |
 |-------|---------|--------|--------------|
-| `tts` | `/pst:tts` | ✅ Available | Summarize + speak text aloud (Kokoro via mlx-audio). |
+| `tts` | `/pst:tts` | ✅ Available | Summarize + speak text aloud (Kokoro or nine other stock-voice models via mlx-audio). |
 | `tts-clone` | `/pst:tts-clone` | ✅ Available | Speak in your own voice, cloned from a reference recording (VoxCPM2, Qwen3-TTS, or MOSS-TTS-Nano via mlx-audio). |
 | `stt` | `/pst:stt` | 🔜 Planned | Local, on-device transcription — talk *to* the machine, not just hear it talk back. |
 | `converse` | `/pst:converse` | 🔜 Planned | Full duplex voice loop (STT → agent → TTS), usable in parallel with other work. |
@@ -330,7 +363,7 @@ can land one at a time.
 
 | Feature | Status | What it does |
 |---------|--------|--------------|
-| **Voice selection** | 🔜 Planned | Choose which Kokoro voice speaks (`bin/tts --voice` exists; surface it as a first-class, persisted preference so you can set a default voice for the assistant). |
+| **Voice selection** | ✅ Available | Choose the model and voice that speaks, per call or as a persisted default — see [Choosing a model](#choosing-a-model). |
 | **Speed control** | 🔜 Planned | Adjust speaking rate (slower for dense info, faster for quick confirmations), settable per-call and as a default. |
 | **Pronunciation dictionary** | 🔜 Planned | A user-editable map of word → how-to-say-it, so terms like `id` → "eye-dee" or `Nutiliti` → "newtility" are always spoken correctly. Replaces today's ad-hoc rules baked into the skill. |
 | **Tone / speech style** | 🔜 Planned | Select a delivery style (e.g. calm, upbeat, terse, narrator) so the same text can be spoken to match the moment. |

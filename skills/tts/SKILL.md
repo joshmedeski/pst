@@ -1,6 +1,6 @@
 ---
 name: tts
-description: Summarize conversation feedback and speak it aloud using the local tts binary (Kokoro TTS via mlx-audio), and control always-on / verbose voice modes. Use when the user runs "/pst:tts", says "read this back to me", "summarize and speak", "text to speech", wants an audio summary, or wants the assistant to keep speaking throughout the session. Trigger on any request to hear something spoken aloud.
+description: Summarize conversation feedback and speak it aloud using the local tts binary (Kokoro or another stock-voice model via mlx-audio), and control always-on / verbose voice modes. Use when the user runs "/pst:tts", says "read this back to me", "summarize and speak", "text to speech", wants an audio summary, or wants the assistant to keep speaking throughout the session. Trigger on any request to hear something spoken aloud.
 ---
 
 # TTS - Text to Speech
@@ -38,6 +38,11 @@ Run the summary or narration through `tts` in the background:
 ```bash
 tts "Your spoken message here"
 ```
+
+Do not pass `--model` or `--voice` unless the user asks for a specific one:
+`tts` resolves both from `$PST_TTS_MODEL` / `$PST_TTS_VOICE` and the defaults
+saved with `tts --set-default-model` / `tts --set-default`. Run `tts --models`
+or `tts --voices` to see the options.
 
 ALWAYS run `tts` via the Bash tool with `run_in_background: true` and **no**
 trailing `&`. A trailing `&` is redundant, trips a command-safety prompt, and

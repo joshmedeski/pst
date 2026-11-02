@@ -41,7 +41,8 @@ info "Installing mlx-audio (git main) as a uv tool…"
 uv tool install --force git+https://github.com/Blaizzy/mlx-audio.git \
   --prerelease=allow --with "misaki[en]" --with num2words \
   --with espeakng-loader --with "numpy>=1.26,<2" \
-  --with "spacy>=3.7,<4" --with pip
+  --with "spacy>=3.7,<4" --with pip \
+  --with "mistral-common[audio]" --with g2p_en
 
 # 3. Download the spaCy English model into the tool's own env.
 #    (`uv tool run` would create an ephemeral env without spacy, so invoke the

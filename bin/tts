@@ -2,91 +2,236 @@
 # Project:
 #   mlx-audio:    https://github.com/Blaizzy/mlx-audio
 #   PyPI:         https://pypi.org/project/mlx-audio/
-#   Kokoro model: https://huggingface.co/mlx-community/Kokoro-82M-4bit
 #
-# Install / Upgrade — run `pst-setup` (or `/pst:setup` in Claude Code). It is the
-# single source of truth for the exact uv tool install (git main required for the
-# 4bit model, the no-`phonemizer` rule, and the spaCy model download).
+# Install / Upgrade — run `pst-setup` (or `/pst:setup` in Claude Code).
 set -euo pipefail
 
-# Known Kokoro-82M English voices (source of truth for both --voices and validation).
-AMERICAN_FEMALE=(af_alloy af_aoede af_bella af_heart af_jessica af_kore af_nicole af_nova af_river af_sarah af_sky)
-AMERICAN_MALE=(am_adam am_echo am_eric am_fenrir am_liam am_michael am_onyx am_puck am_santa)
-BRITISH_FEMALE=(bf_alice bf_emma bf_isabella bf_lily)
-BRITISH_MALE=(bm_daniel bm_fable bm_george bm_lewis)
-SPANISH_FEMALE=(ef_dora)
-SPANISH_MALE=(em_alex em_santa)
-VOICES=("${AMERICAN_FEMALE[@]}" "${AMERICAN_MALE[@]}" "${BRITISH_FEMALE[@]}" "${BRITISH_MALE[@]}" "${SPANISH_FEMALE[@]}" "${SPANISH_MALE[@]}")
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pst"
+MODEL_CONFIG_FILE="$CONFIG_DIR/tts-model"
+DEFAULT_MODEL="kokoro"
+MODELS="kokoro kitten-nano kitten-mini pocket soprano melo vibevoice qwen3-0.6b qwen3-1.7b voxtral"
 
-DEFAULT_VOICE="af_heart"
+MODEL_TABLE='name|repo|deps|voice|gain_db|langs|params|disk|peak_mem|startup|speed|license
+kokoro|mlx-community/Kokoro-82M-4bit|prince-canuma/Kokoro-82M|af_heart|5|9|82M|0.6 GB|2.5 GB|2.5 s|43x|Apache-2.0
+kitten-nano|mlx-community/kitten-tts-nano-0.8||Bella|-2|1|15M|0.06 GB|1.8 GB|0.8 s|90x|Apache-2.0
+kitten-mini|mlx-community/kitten-tts-mini-0.8||Bella|-1|1|80M|0.3 GB|2.1 GB|1.1 s|24x|Apache-2.0
+pocket|mlx-community/pocket-tts||alba|3|1|100M|0.2 GB|1.0 GB|1.9 s|19x|CC-BY-4.0
+soprano|mlx-community/Soprano-1.1-80M-bf16||default|4|1|80M|0.3 GB|0.4 GB|2.9 s|18x|Apache-2.0
+melo|mlx-community/MeloTTS-English-v3-MLX||default|-1|1|50M|0.6 GB|1.3 GB|5.7 s|48x|MIT
+vibevoice|mlx-community/VibeVoice-Realtime-0.5B-8bit||en-Frank_man|1|11|0.5B|1.1 GB|3.9 GB|3.6 s|8x|MIT
+qwen3-0.6b|mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit||ryan|3|10|0.6B|1.8 GB|3.8 GB|2.6 s|5x|Apache-2.0
+qwen3-1.7b|mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit||ryan|1|10|1.7B|2.9 GB|5.0 GB|2.6 s|4.5x|Apache-2.0
+voxtral|mlx-community/Voxtral-4B-TTS-2603-mlx-4bit||cheerful_female|11|9|4B|2.4 GB|3.4 GB|3.1 s|3.2x|CC-BY-NC-4.0'
+
+model_field() {
+  awk -F'|' -v m="$1" -v f="$2" '
+    NR == 1 { for (i = 1; i <= NF; i++) col[$i] = i; next }
+    $1 == m { print $col[f]; found = 1 }
+    END { exit !found }' <<<"$MODEL_TABLE"
+}
+
+KOKORO_AMERICAN_FEMALE="af_alloy af_aoede af_bella af_heart af_jessica af_kore af_nicole af_nova af_river af_sarah af_sky"
+KOKORO_AMERICAN_MALE="am_adam am_echo am_eric am_fenrir am_liam am_michael am_onyx am_puck am_santa"
+KOKORO_BRITISH_FEMALE="bf_alice bf_emma bf_isabella bf_lily"
+KOKORO_BRITISH_MALE="bm_daniel bm_fable bm_george bm_lewis"
+KOKORO_SPANISH_FEMALE="ef_dora"
+KOKORO_SPANISH_MALE="em_alex em_santa"
+
+model_voices() {
+  case "$1" in
+    kokoro) echo $KOKORO_AMERICAN_FEMALE $KOKORO_AMERICAN_MALE $KOKORO_BRITISH_FEMALE $KOKORO_BRITISH_MALE $KOKORO_SPANISH_FEMALE $KOKORO_SPANISH_MALE ;;
+    kitten-*) echo Bella Jasper Luna Bruno Rosie Hugo Kiki Leo ;;
+    pocket) echo alba marius javert jean fantine cosette eponine azelma ;;
+    soprano|melo) echo default ;;
+    vibevoice) echo en-Carter_man en-Davis_man en-Emma_woman en-Frank_man en-Grace_woman en-Mike_man in-Samuel_man \
+      de-Spk0_man de-Spk1_woman fr-Spk0_man fr-Spk1_woman it-Spk0_woman it-Spk1_man jp-Spk0_man jp-Spk1_woman \
+      kr-Spk0_woman kr-Spk1_man nl-Spk0_man nl-Spk1_woman pl-Spk0_man pl-Spk1_woman pt-Spk0_woman pt-Spk1_man \
+      sp-Spk0_woman sp-Spk1_man ;;
+    qwen3-*) echo ryan aiden eric dylan serena vivian uncle_fu ono_anna sohee ;;
+    voxtral) echo casual_male casual_female cheerful_female neutral_male neutral_female \
+      fr_male fr_female es_male es_female de_male de_female it_male it_female pt_male pt_female \
+      nl_male nl_female ar_male hi_male hi_female ;;
+  esac
+}
+
+HUB="${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface}/hub}"
+TOOL_PY="$(uv tool dir 2>/dev/null || echo "$HOME/.local/share/uv/tools")/mlx-audio/bin/python"
 
 usage() {
   cat <<EOF
-Usage: tts [--voice <name>] <text>
+Usage: tts [--model <name>] [--voice <name>] <text>
 
-Speak text aloud using Kokoro TTS (mlx-audio).
+Speak text aloud with a stock-voice model (mlx-audio).
 
 Options:
-  --voice <name>   Voice to use (default: ${DEFAULT_VOICE}). See --voices.
-  --voices         List available voices grouped by language.
-  -h, --help       Show this help.
+  --voice <name>       Voice to use. See --voices and the resolution order below.
+  --voices             List the voices of the model in use.
+  --set-default <name> Remember <name> as this machine's default voice for the model in use.
+  --model <name>       Model: ${MODELS// /, } (default: ${DEFAULT_MODEL}).
+  --models             Compare models (voices, size, memory, speed); * marks the one in use.
+  --model-repos        Print each model's Hugging Face repos (for pst-cleanup).
+  --set-default-model <name>
+                       Remember <name> as this machine's default model.
+  -h, --help           Show this help.
+
+Model resolution order:
+  1. --model   2. \$PST_TTS_MODEL   3. --set-default-model   4. ${DEFAULT_MODEL}
+
+Voice resolution order:
+  1. --voice   2. \$PST_TTS_VOICE   3. --set-default (per model)   4. the model's default
 
 Examples:
   tts "hello world"
   tts --voice bm_george "good evening"
+  tts --model pocket --voice marius "the build passed"
 EOF
 }
 
 list_voices() {
-  printf '\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 American female (af_): %s\n' "${AMERICAN_FEMALE[*]}"
-  printf '\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 American male   (am_): %s\n' "${AMERICAN_MALE[*]}"
-  printf '\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7 British female  (bf_): %s\n' "${BRITISH_FEMALE[*]}"
-  printf '\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7 British male    (bm_): %s\n' "${BRITISH_MALE[*]}"
-  printf '\xF0\x9F\x87\xAA\xF0\x9F\x87\xB8 Spanish female  (ef_): %s\n' "${SPANISH_FEMALE[*]}"
-  printf '\xF0\x9F\x87\xAA\xF0\x9F\x87\xB8 Spanish male    (em_): %s\n' "${SPANISH_MALE[*]}"
-  printf '\nDefault: %s\n' "${DEFAULT_VOICE}"
+  if [[ "$MODEL" == "kokoro" ]]; then
+    printf '\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 American female (af_): %s\n' "$KOKORO_AMERICAN_FEMALE"
+    printf '\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 American male   (am_): %s\n' "$KOKORO_AMERICAN_MALE"
+    printf '\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7 British female  (bf_): %s\n' "$KOKORO_BRITISH_FEMALE"
+    printf '\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7 British male    (bm_): %s\n' "$KOKORO_BRITISH_MALE"
+    printf '\xF0\x9F\x87\xAA\xF0\x9F\x87\xB8 Spanish female  (ef_): %s\n' "$KOKORO_SPANISH_FEMALE"
+    printf '\xF0\x9F\x87\xAA\xF0\x9F\x87\xB8 Spanish male    (em_): %s\n' "$KOKORO_SPANISH_MALE"
+  else
+    model_voices "$MODEL" | tr ' ' '\n' | sed 's/^/  /'
+  fi
+  printf '\nModel: %s   Voice in use: %s\n' "$MODEL" "$VOICE"
 }
 
-is_valid_voice() {
-  local candidate="$1"
-  for v in "${VOICES[@]}"; do
-    [[ "$v" == "$candidate" ]] && return 0
+is_downloaded() { [[ -d "$HUB/models--${1//\//--}" ]]; }
+
+list_models() {
+  printf '  %-12s %6s %5s %6s %8s %8s %8s %6s  %-12s %s\n' \
+    MODEL VOICES LANGS PARAMS DISK PEAKMEM STARTUP SPEED LICENSE DOWNLOADED
+  for m in $MODELS; do
+    local mark=" " repo dl=no
+    [[ "$m" == "$MODEL" ]] && mark="*"
+    repo="$(model_field "$m" repo)"
+    is_downloaded "$repo" && dl="yes ($(du -sh "$HUB/models--${repo//\//--}" | awk "{print \$1}"))"
+    printf '%s %-12s %6s %5s %6s %8s %8s %8s %6s  %-12s %s\n' "$mark" "$m" \
+      "$(model_voices "$m" | wc -w | tr -d ' ')" "$(model_field "$m" langs)" "$(model_field "$m" params)" \
+      "$(model_field "$m" disk)" "$(model_field "$m" peak_mem)" "$(model_field "$m" startup)" \
+      "$(model_field "$m" speed)" "$(model_field "$m" license)" "$dl"
   done
-  return 1
+  echo
+  echo "Measured on an M4 Max: startup = process start to first sound; speed = x real time."
 }
 
-VOICE="$DEFAULT_VOICE"
+speak() {
+  local lang=""
+  [[ "$MODEL" == "kokoro" ]] && lang="${VOICE:0:1}"
+  "$TOOL_PY" - "$(model_field "$MODEL" repo)" "$VOICE" "$(model_field "$MODEL" gain_db)" "$lang" "$1" <<'EOF'
+import inspect, os, sys
+
+import espeakng_loader
+os.environ.setdefault("PHONEMIZER_ESPEAK_LIBRARY", espeakng_loader.get_library_path())
+os.environ.setdefault("ESPEAK_DATA_PATH", espeakng_loader.get_data_path())
+
+import mlx.core as mx
+from mlx_audio.tts.audio_player import AudioPlayer
+from mlx_audio.tts.utils import load_model
+
+repo, voice, gain_db, lang, text = sys.argv[1:]
+model = load_model(repo)
+kw = {"text": text}
+if voice != "default":
+    kw["voice"] = voice
+params = inspect.signature(model.generate).parameters
+if "stream" in params:
+    kw["stream"] = True
+if lang:
+    kw["lang_code"] = lang
+gain = 10 ** (float(gain_db) / 20)
+player = AudioPlayer(sample_rate=model.sample_rate)
+for result in model.generate(**kw):
+    player.queue_audio(mx.clip(result.audio * gain, -1, 1))
+player.wait_for_drain()
+player.stop()
+EOF
+}
+
+die() { echo "tts: $*" >&2; exit 1; }
+
+VOICE="${PST_TTS_VOICE:-}"
+MODEL="${PST_TTS_MODEL:-}"
+SET_DEFAULT=""
+SET_DEFAULT_MODEL=""
+ACTION=""
 TEXT_PARTS=()
+
+need() { [[ $2 -ge 2 ]] || die "$1 requires a value"; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    --voices)
-      list_voices
-      exit 0
-      ;;
-    --voice)
-      [[ $# -ge 2 ]] || { echo "tts: --voice requires a value (see: tts --voices)" >&2; exit 1; }
-      VOICE="$2"
-      shift 2
-      ;;
-    --voice=*)
-      VOICE="${1#--voice=}"
-      shift
-      ;;
-    *)
-      TEXT_PARTS+=("$1")
-      shift
-      ;;
+    -h|--help) usage; exit 0 ;;
+    --voices|--models|--model-repos) ACTION="${1#--}"; shift ;;
+    --voice) need "$1" $#; VOICE="$2"; shift 2 ;;
+    --voice=*) VOICE="${1#--voice=}"; shift ;;
+    --model) need "$1" $#; MODEL="$2"; shift 2 ;;
+    --model=*) MODEL="${1#--model=}"; shift ;;
+    --set-default) need "$1" $#; SET_DEFAULT="$2"; shift 2 ;;
+    --set-default=*) SET_DEFAULT="${1#--set-default=}"; shift ;;
+    --set-default-model) need "$1" $#; SET_DEFAULT_MODEL="$2"; shift 2 ;;
+    --set-default-model=*) SET_DEFAULT_MODEL="${1#--set-default-model=}"; shift ;;
+    --) shift; TEXT_PARTS+=("$@"); break ;;
+    --*) echo "tts: unknown option '$1'" >&2; usage >&2; exit 1 ;;
+    *) TEXT_PARTS+=("$1"); shift ;;
   esac
 done
 
-if ! is_valid_voice "$VOICE"; then
-  echo "tts: unknown voice '$VOICE'. Run 'tts --voices' to see available voices." >&2
-  exit 1
+valid_model() { model_field "$1" name >/dev/null; }
+
+if [[ -n "$SET_DEFAULT_MODEL" ]]; then
+  valid_model "$SET_DEFAULT_MODEL" || die "unknown model '$SET_DEFAULT_MODEL' (choose from: $MODELS)"
+  mkdir -p "$CONFIG_DIR"
+  printf '%s\n' "$SET_DEFAULT_MODEL" > "$MODEL_CONFIG_FILE"
+  echo "tts: default model set to '$SET_DEFAULT_MODEL' ($MODEL_CONFIG_FILE)"
+  exit 0
+fi
+
+if [[ -z "$MODEL" && -f "$MODEL_CONFIG_FILE" ]]; then
+  MODEL="$(tr -d '[:space:]' < "$MODEL_CONFIG_FILE")"
+fi
+MODEL="${MODEL:-$DEFAULT_MODEL}"
+valid_model "$MODEL" || die "unknown model '$MODEL' (choose from: $MODELS)"
+
+if [[ "$ACTION" == "models" ]]; then
+  list_models
+  exit 0
+fi
+
+if [[ "$ACTION" == "model-repos" ]]; then
+  for m in $MODELS; do
+    mark=" "
+    [[ "$m" == "$MODEL" ]] && mark="*"
+    echo "$mark $m" $(model_field "$m" repo) $(model_field "$m" deps)
+  done
+  exit 0
+fi
+
+has_voice() { [[ " $(model_voices "$MODEL") " == *" $1 "* ]]; }
+VOICE_CONFIG_FILE="$CONFIG_DIR/tts-voice-$MODEL"
+
+if [[ -n "$SET_DEFAULT" ]]; then
+  has_voice "$SET_DEFAULT" || die "model '$MODEL' has no voice '$SET_DEFAULT'. Run 'tts --model $MODEL --voices'."
+  mkdir -p "$CONFIG_DIR"
+  printf '%s\n' "$SET_DEFAULT" > "$VOICE_CONFIG_FILE"
+  echo "tts: default voice for '$MODEL' set to '$SET_DEFAULT' ($VOICE_CONFIG_FILE)"
+  exit 0
+fi
+
+if [[ -z "$VOICE" && -f "$VOICE_CONFIG_FILE" ]]; then
+  VOICE="$(tr -d '[:space:]' < "$VOICE_CONFIG_FILE")"
+fi
+VOICE="${VOICE:-$(model_field "$MODEL" voice)}"
+has_voice "$VOICE" || die "model '$MODEL' has no voice '$VOICE'. Run 'tts --model $MODEL --voices'."
+
+if [[ "$ACTION" == "voices" ]]; then
+  list_voices
+  exit 0
 fi
 
 if [[ ${#TEXT_PARTS[@]} -eq 0 ]]; then
@@ -95,16 +240,6 @@ if [[ ${#TEXT_PARTS[@]} -eq 0 ]]; then
   exit 1
 fi
 
-TEXT="${TEXT_PARTS[*]}"
-# lang_code follows the voice prefix (a* -> American, b* -> British).
-LANG_CODE="${VOICE:0:1}"
+[[ -x "$TOOL_PY" ]] || die "mlx-audio tool python not found at $TOOL_PY -- run pst-setup"
 
-# --stream plays the audio live as it generates. We intentionally omit --save
-# (and its --output_path/--file_prefix): playback is all we need, no files.
-mlx_audio.tts.generate \
-  --model mlx-community/Kokoro-82M-4bit \
-  --text "$TEXT" \
-  --voice "$VOICE" \
-  --speed 1.0 \
-  --lang_code "$LANG_CODE" \
-  --stream
+speak "${TEXT_PARTS[*]}"

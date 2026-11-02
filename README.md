@@ -118,16 +118,17 @@ tts-compare -f                  # force regeneration even if cached
 
 [`bin/tts-clone`](bin/tts-clone) speaks text in a voice cloned from a recording
 you supply, instead of Kokoro's stock voice table. It stays on-device like
-everything else here, using
-[Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) (the
-[1.7B Base MLX weights](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16))
-through `mlx-audio`.
+everything else here, running one of three interchangeable cloning models
+through `mlx-audio` — see [Choosing a cloning model](#choosing-a-cloning-model).
 
 ```bash
 tts-clone "the build passed"
 tts-clone --voice josh "twelve files changed"
 tts-clone --voices              # list installed voices
 tts-clone --set-default josh    # remember a default for this machine
+tts-clone --model qwen3 "hi"    # pick a cloning model for one call
+tts-clone --models              # list models; * marks the one in use
+tts-clone --set-default-model moss-nano
 tts-clone --help
 ```
 
@@ -178,23 +179,67 @@ one, `tts-clone` picks it automatically. The default is stored per machine in
 Voice resolution order: `--voice` → `$PST_CLONE_VOICE` → the `--set-default`
 value → the only installed voice.
 
+### Choosing a cloning model
+
+All three models take the same reference recording, so switching is just a
+flag. Ordered from highest fidelity to lightest:
+
+| | `voxcpm2` (default) | `qwen3` | `moss-nano` |
+|---|---|---|---|
+| Model | [VoxCPM2](https://huggingface.co/mlx-community/VoxCPM2-bf16) | [Qwen3-TTS 1.7B Base](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16) | [MOSS-TTS-Nano](https://huggingface.co/mlx-community/MOSS-TTS-Nano-100M) |
+| Fidelity | ★★★ most natural | ★★ good | ★ rough, but recognizable |
+| Parameters | 2B | 1.7B | 0.1B |
+| Disk (download) | 4.6 GB | 4.2 GB | 0.4 GB |
+| Peak memory | 8.2 GB | 6.4 GB | 1.8 GB |
+| Streams | no — whole clip first | yes | no — but done almost instantly |
+| Time to first sound | 5.2 s | 1.6 s | 1.3 s |
+| Generation speed | 1.3× real time | 1.3× real time | ~7× real time |
+| Languages | 30 | 10 | 20 |
+| Pick it when | the voice matters most and a short wait is fine | you want quick, steady feedback | the machine is low on memory or battery |
+
+Measured on an M4 Max (48 GB) with mlx-audio 0.4.4: median of three warm runs
+speaking an 8-second, three-sentence message. Model load adds about 1.5 s on
+every call and is not included above. Time to first sound for the non-streaming
+models grows with the length of the text; Qwen3's does not. Energy was not
+measured directly — generation time and peak memory are the best proxies here,
+which makes `moss-nano` by far the lightest. Fidelity is a subjective
+listening ranking.
+
+Model resolution order: `--model` → `$PST_CLONE_MODEL` → the
+`--set-default-model` value (stored in
+`${XDG_CONFIG_HOME:-~/.config}/pst/clone-model`) → `voxcpm2`.
+
+> **First run** of each model downloads its weights (see the Disk row), so it
+> takes noticeably longer than later runs.
+
+### Freeing disk space after trying models
+
+Once you've settled on a model, `pst-cleanup` deletes the ones you aren't
+using:
+
+```bash
+pst-cleanup         # list pst models on disk, their sizes, and ask before deleting
+pst-cleanup --yes   # delete without asking
+```
+
+It keeps the `tts-clone` model currently in use (resolved the same way as
+`tts-clone --models`) and the Kokoro model `tts` uses, and deletes the other
+cloning models plus any Kokoro variants `tts-compare` downloaded. Only models
+pst downloads are considered — anything else in your Hugging Face cache is left
+alone. Deleted models re-download the next time you use them.
+
 ### How it differs from `tts`
 
-| | `tts` (Kokoro) | `tts-clone` (Qwen3-TTS) |
+| | `tts` (Kokoro) | `tts-clone` |
 |---|---|---|
 | Voice | 31 stock voices | one you supply |
-| Streaming | yes — audio starts right away | yes — after the model loads |
-| Delay before sound | none | a few seconds while the 1.7B model loads |
+| Streaming | yes — audio starts right away | depends on the model (see above) |
+| Delay before sound | none | ~3–7 s, depending on the model |
 | Speaking rate | `--speed` honored | not supported; pauses follow punctuation |
-| Language | `lang_code` from the voice prefix | 10 languages |
 | Disk | nothing written | nothing written |
 
 Because of that delay, `tts` remains the right choice for always-on narration
 and running commentary. Reach for `tts-clone` when the voice itself is the point.
-
-> **First run** downloads the ~4 GB Qwen3-TTS weights, so it takes noticeably
-> longer than later runs. The first clone in a session is also slower
-> than the rest, since the weights have to be read back from disk.
 
 ## Setting up the TTS engine (mlx-audio)
 
@@ -250,7 +295,9 @@ uv tool install --force git+https://github.com/Blaizzy/mlx-audio.git \
 
 - [mlx-audio](https://github.com/Blaizzy/mlx-audio) — the MLX speech engine behind both `tts` and `tts-clone`
 - [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-4bit) — the stock-voice model used by `tts`
-- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) — the voice-cloning model used by `tts-clone` ([MLX weights](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16))
+- [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) — `tts-clone`'s default cloning model ([MLX weights](https://huggingface.co/mlx-community/VoxCPM2-bf16))
+- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) — streaming cloning model, `tts-clone --model qwen3` ([MLX weights](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16))
+- [MOSS-TTS-Nano](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M) — lightweight cloning model, `tts-clone --model moss-nano` ([MLX weights](https://huggingface.co/mlx-community/MOSS-TTS-Nano-100M))
 
 ## Roadmap
 
@@ -267,7 +314,7 @@ invoked independently or composed together.
 | Skill | Command | Status | What it does |
 |-------|---------|--------|--------------|
 | `tts` | `/pst:tts` | ✅ Available | Summarize + speak text aloud (Kokoro via mlx-audio). |
-| `tts-clone` | `/pst:tts-clone` | ✅ Available | Speak in your own voice, cloned from a reference recording (Qwen3-TTS via mlx-audio). |
+| `tts-clone` | `/pst:tts-clone` | ✅ Available | Speak in your own voice, cloned from a reference recording (VoxCPM2, Qwen3-TTS, or MOSS-TTS-Nano via mlx-audio). |
 | `stt` | `/pst:stt` | 🔜 Planned | Local, on-device transcription — talk *to* the machine, not just hear it talk back. |
 | `converse` | `/pst:converse` | 🔜 Planned | Full duplex voice loop (STT → agent → TTS), usable in parallel with other work. |
 | `wake-word` | — | 🔜 Planned | Hands-free local trigger ("hey pst") so the assistant listens only when summoned. |

@@ -1,6 +1,6 @@
 ---
 name: tts-clone
-description: Speak text aloud in the user's own cloned voice using the local tts-clone binary (Qwen3-TTS via mlx-audio). Use when the user runs "/pst:tts-clone", says "say that in my voice", "read this back in my own voice", "use my cloned voice", or asks for spoken output in a cloned/custom voice rather than a stock one. For stock Kokoro voices and always-on voice modes, use the tts skill instead.
+description: Speak text aloud in the user's own cloned voice using the local tts-clone binary (VoxCPM2, Qwen3-TTS, or MOSS-TTS-Nano via mlx-audio). Use when the user runs "/pst:tts-clone", says "say that in my voice", "read this back in my own voice", "use my cloned voice", or asks for spoken output in a cloned/custom voice rather than a stock one. For stock Kokoro voices and always-on voice modes, use the tts skill instead.
 ---
 
 # TTS Clone - speak in a cloned voice
@@ -27,9 +27,14 @@ fires the completion notification before the audio finishes playing.
 
 ## Timing
 
-Like `tts`, Qwen3-TTS streams: playback starts while the rest is still
-generating. Expect a few seconds of silence first while the 1.7B model loads
-(longer on the first run, which downloads ~4 GB).
+The delay depends on the model. The default, `voxcpm2`, does not stream: it
+generates the whole clip first, roughly 0.75s of silence per second of speech.
+`qwen3` streams and starts in about 3s. `moss-nano` is the fastest and lightest
+but sounds rougher. First runs are longer while the weights download.
+
+Do not pass `--model` unless the user asks for a specific model. To change the
+default when the user asks (e.g. "switch my clone voice to Qwen"), run
+`tts-clone --set-default-model <voxcpm2|qwen3|moss-nano>`.
 
 Prefer `tts` for running narration and always-on voice modes. Reach for
 `tts-clone` when the voice itself is the point.

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Project:
 #   mlx-audio:        https://github.com/Blaizzy/mlx-audio
-#   Qwen3-TTS model:  https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16
+#   VoxCPM2:          https://huggingface.co/mlx-community/VoxCPM2-bf16
+#   Qwen3-TTS:        https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16
+#   MOSS-TTS-Nano:    https://huggingface.co/mlx-community/MOSS-TTS-Nano-100M
 #
 # Speak text in a cloned voice. Where `tts` picks from Kokoro's fixed voice
 # table, the voice here comes from a reference recording you supply -- so there
@@ -22,21 +24,43 @@ VOICES_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pst/voices"
 # committed file. Set it with `tts-clone --set-default <name>`.
 CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/pst/clone-voice"
 
-MODEL="mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
+MODEL_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/pst/clone-model"
+DEFAULT_MODEL="voxcpm2"
+MODELS="voxcpm2 qwen3 moss-nano"
+
+model_repo() {
+  case "$1" in
+    voxcpm2)   echo "mlx-community/VoxCPM2-bf16" ;;
+    qwen3)     echo "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16" ;;
+    moss-nano) echo "mlx-community/MOSS-TTS-Nano-100M" ;;
+    *)         return 1 ;;
+  esac
+}
+
+model_deps() {
+  case "$1" in
+    moss-nano) echo "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano mlx-community/MOSS-Audio-Tokenizer-Nano" ;;
+  esac
+}
+
+model_streams() { [[ "$1" == "qwen3" ]]; }
+
 TOOL_PY="$(uv tool dir 2>/dev/null || echo "$HOME/.local/share/uv/tools")/mlx-audio/bin/python"
 
 speak() {
-  "$TOOL_PY" - "$MODEL" "$1" "$2" <<'EOF'
+  local stream=0
+  model_streams "$MODEL" && stream=1
+  "$TOOL_PY" - "$(model_repo "$MODEL")" "$stream" "$1" "$2" <<'EOF'
 import sys
 from mlx_audio.tts.audio_player import AudioPlayer
 from mlx_audio.tts.utils import load_model
 from mlx_audio.utils import load_audio
 
-model_id, ref_wav, text = sys.argv[1:]
+model_id, stream, ref_wav, text = sys.argv[1:]
 model = load_model(model_id)
 player = AudioPlayer(sample_rate=model.sample_rate)
 ref_audio = load_audio(ref_wav, sample_rate=model.sample_rate)
-for result in model.generate(text=text, ref_audio=ref_audio, stream=True):
+for result in model.generate(text=text, ref_audio=ref_audio, stream=stream == "1"):
     player.queue_audio(result.audio)
 player.wait_for_drain()
 player.stop()
@@ -45,14 +69,18 @@ EOF
 
 usage() {
   cat <<EOF
-Usage: tts-clone [--voice <name>] <text>
+Usage: tts-clone [--voice <name>] [--model <name>] <text>
 
-Speak text in a cloned voice (Qwen3-TTS via mlx-audio).
+Speak text in a cloned voice via mlx-audio.
 
 Options:
   --voice <name>       Voice to use. See resolution order below.
   --voices             List installed voices.
   --set-default <name> Remember <name> as this machine's default voice.
+  --model <name>       Cloning model: ${MODELS// /, } (default: ${DEFAULT_MODEL}).
+  --models             List cloning models and their downloads; * marks the one in use.
+  --set-default-model <name>
+                       Remember <name> as this machine's default model.
   -h, --help           Show this help.
 
 Voice resolution order:
@@ -61,9 +89,16 @@ Voice resolution order:
   3. the default set by --set-default
   4. the only installed voice, if exactly one is installed
 
+Model resolution order:
+  1. --model
+  2. \$PST_CLONE_MODEL
+  3. the default set by --set-default-model
+  4. ${DEFAULT_MODEL}
+
 Examples:
   tts-clone "the build passed"
   tts-clone --voice josh "twelve files changed"
+  tts-clone --model moss-nano "faster, lighter, rougher"
 
 Add a voice by placing <name>.wav (a clean ~15-20s sample) in ${VOICES_DIR}.
 EOF
@@ -90,7 +125,10 @@ list_voices() {
 }
 
 VOICE="${PST_CLONE_VOICE:-}"
+MODEL="${PST_CLONE_MODEL:-}"
 SET_DEFAULT=""
+SET_DEFAULT_MODEL=""
+LIST_MODELS=0
 TEXT_PARTS=()
 
 while [[ $# -gt 0 ]]; do
@@ -110,6 +148,28 @@ while [[ $# -gt 0 ]]; do
       ;;
     --voice=*)
       VOICE="${1#--voice=}"
+      shift
+      ;;
+    --models)
+      LIST_MODELS=1
+      shift
+      ;;
+    --model)
+      [[ $# -ge 2 ]] || { echo "tts-clone: --model requires a value" >&2; exit 1; }
+      MODEL="$2"
+      shift 2
+      ;;
+    --model=*)
+      MODEL="${1#--model=}"
+      shift
+      ;;
+    --set-default-model)
+      [[ $# -ge 2 ]] || { echo "tts-clone: --set-default-model requires a model name" >&2; exit 1; }
+      SET_DEFAULT_MODEL="$2"
+      shift 2
+      ;;
+    --set-default-model=*)
+      SET_DEFAULT_MODEL="${1#--set-default-model=}"
       shift
       ;;
     --set-default)
@@ -140,6 +200,36 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "$SET_DEFAULT_MODEL" ]]; then
+  if ! model_repo "$SET_DEFAULT_MODEL" >/dev/null; then
+    echo "tts-clone: unknown model '$SET_DEFAULT_MODEL' (choose from: $MODELS)" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$MODEL_CONFIG_FILE")"
+  printf '%s\n' "$SET_DEFAULT_MODEL" > "$MODEL_CONFIG_FILE"
+  printf "tts-clone: default model set to '%s' (%s)\n" "$SET_DEFAULT_MODEL" "$MODEL_CONFIG_FILE"
+  exit 0
+fi
+
+if [[ -z "$MODEL" && -f "$MODEL_CONFIG_FILE" ]]; then
+  MODEL="$(tr -d '[:space:]' < "$MODEL_CONFIG_FILE")"
+fi
+MODEL="${MODEL:-$DEFAULT_MODEL}"
+
+if ! model_repo "$MODEL" >/dev/null; then
+  echo "tts-clone: unknown model '$MODEL' (choose from: $MODELS)" >&2
+  exit 1
+fi
+
+if [[ "$LIST_MODELS" == "1" ]]; then
+  for m in $MODELS; do
+    mark=" "
+    [[ "$m" == "$MODEL" ]] && mark="*"
+    printf '%s %-10s %s\n' "$mark" "$m" "$(echo $(model_repo "$m") $(model_deps "$m"))"
+  done
+  exit 0
+fi
 
 if [[ -n "$SET_DEFAULT" ]]; then
   if [[ ! -f "$VOICES_DIR/$SET_DEFAULT.wav" ]]; then

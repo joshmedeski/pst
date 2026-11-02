@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HUB="${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface}/hub}"
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+KOKORO_KEEP="mlx-community/Kokoro-82M-4bit prince-canuma/Kokoro-82M"
+KOKORO_EXTRA="mlx-community/Kokoro-82M-bf16 mlx-community/Kokoro-82M-8bit mlx-community/Kokoro-82M-6bit"
+
+usage() {
+  cat <<EOF
+Usage: pst-cleanup [--yes]
+
+Delete downloaded pst models you are not using, to free disk space.
+
+Kept:
+  - the Kokoro model used by tts (Kokoro-82M-4bit)
+  - the tts-clone model currently in use (see: tts-clone --models)
+
+Removed (if downloaded):
+  - the other tts-clone models
+  - the Kokoro variants downloaded by tts-compare
+
+Only models pst downloads are considered; nothing else in
+$HUB is touched. Removed models re-download on next use.
+
+Options:
+  -y, --yes    Delete without asking.
+  -h, --help   Show this help.
+EOF
+}
+
+YES=0
+for arg in "$@"; do
+  case "$arg" in
+    -y|--yes) YES=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "pst-cleanup: unknown option '$arg'" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+cache_dir() { printf '%s/models--%s' "$HUB" "${1//\//--}"; }
+
+clone_models="$("$BIN_DIR/tts-clone" --models)"
+in_use="$(awk '$1 == "*" { print $2 }' <<<"$clone_models")"
+keep="$KOKORO_KEEP $(awk '$1 == "*" { for (i = 3; i <= NF; i++) print $i }' <<<"$clone_models")"
+candidates="$KOKORO_EXTRA $(awk '$1 != "*" { for (i = 2; i <= NF; i++) print $i }' <<<"$clone_models")"
+
+size_of() { du -sch "$@" | tail -1 | cut -f1; }
+
+GREEN="" RED="" RESET=""
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  GREEN=$'\033[32m' RED=$'\033[31m' RESET=$'\033[0m'
+fi
+
+remove=()
+remove_dirs=()
+found=0
+echo "tts-clone model in use: $in_use"
+echo
+echo "pst models found in $HUB:"
+printf '  %6s  %-6s  %s\n' SIZE ACTION MODEL
+for repo in $keep $candidates; do
+  dir="$(cache_dir "$repo")"
+  [[ -d "$dir" ]] || continue
+  found=1
+  action=keep color="$GREEN"
+  case " $(echo $keep) " in *" $repo "*) ;; *)
+    action=delete color="$RED"
+    remove+=("$repo")
+    remove_dirs+=("$dir")
+  esac
+  printf '  %6s  %s%-6s%s  %s\n' "$(size_of "$dir")" "$color" "$action" "$RESET" "$repo"
+done
+[[ "$found" == "1" ]] || echo "  (none)"
+echo
+
+if [[ ${#remove[@]} -eq 0 ]]; then
+  echo "Nothing to remove."
+  exit 0
+fi
+
+echo "Deleting ${#remove[@]} model(s) frees $(size_of "${remove_dirs[@]}")."
+echo
+
+if [[ "$YES" != "1" ]]; then
+  read -r -p "Remove these? [y/N] " answer || answer=""
+  [[ "$answer" == [yY]* ]] || { echo "Nothing removed."; exit 0; }
+fi
+
+for repo in "${remove[@]}"; do
+  rm -rf "$(cache_dir "$repo")" "$HUB/.locks/models--${repo//\//--}"
+  echo "removed $repo"
+done

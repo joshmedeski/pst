@@ -32,7 +32,11 @@ check "unknown model fails" "1" "$("$TTS" --model nope hi >/dev/null 2>&1; echo 
 check "voice from other model fails" "1" "$("$TTS" --model pocket --voice af_heart hi >/dev/null 2>&1; echo $?)"
 check "bad --set-default fails" "1" "$("$TTS" --model pocket --set-default af_heart >/dev/null 2>&1; echo $?)"
 check "unknown flag fails" "1" "$("$TTS" --tempo 2 hi >/dev/null 2>&1; echo $?)"
-check "model-repos lists every model" "10" "$("$TTS" --model-repos | wc -l | tr -d ' ')"
+check "say default voice" "Samantha" "$(voice_in_use --model say)"
+check "say short voice name" "Eddy" "$(voice_in_use --model say --voice Eddy)"
+check "say full voice name" "Eddy (English (US))" "$("$TTS" --model say --voice "Eddy (English (US))" --voices | sed -n 's/.*Voice in use: //p')"
+check "say unknown voice fails" "1" "$("$TTS" --model say --voice Nope hi >/dev/null 2>&1; echo $?)"
+check "model-repos lists every model" "11" "$("$TTS" --model-repos | wc -l | tr -d ' ')"
 check "kokoro keeps its voice dep" "prince-canuma/Kokoro-82M" "$("$TTS" --model-repos | awk '$1 == "kokoro" { print $3 }')"
 
 if [[ "$fails" -eq 0 ]]; then echo "ALL PASS"; else echo "$fails FAILED"; exit 1; fi

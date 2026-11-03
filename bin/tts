@@ -9,9 +9,10 @@ set -euo pipefail
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pst"
 MODEL_CONFIG_FILE="$CONFIG_DIR/tts-model"
 DEFAULT_MODEL="kokoro"
-MODELS="kokoro kitten-nano kitten-mini pocket soprano melo vibevoice qwen3-0.6b qwen3-1.7b voxtral"
+MODELS="say kokoro kitten-nano kitten-mini pocket soprano melo vibevoice qwen3-0.6b qwen3-1.7b voxtral"
 
 MODEL_TABLE='name|repo|deps|voice|gain_db|langs|params|disk|peak_mem|startup|speed|license
+say|||Samantha|0|40|-|0 GB|0.07 GB|0.1 s|8x|macOS
 kokoro|mlx-community/Kokoro-82M-4bit|prince-canuma/Kokoro-82M|af_heart|5|9|82M|0.6 GB|2.5 GB|2.5 s|43x|Apache-2.0
 kitten-nano|mlx-community/kitten-tts-nano-0.8||Bella|-2|1|15M|0.06 GB|1.8 GB|0.8 s|90x|Apache-2.0
 kitten-mini|mlx-community/kitten-tts-mini-0.8||Bella|-1|1|80M|0.3 GB|2.1 GB|1.1 s|24x|Apache-2.0
@@ -38,6 +39,14 @@ KOKORO_SPANISH_FEMALE="ef_dora"
 KOKORO_SPANISH_MALE="em_alex em_santa"
 
 model_voices() {
+  case "$1" in
+    say) say -v '?' | sed -E 's/ +[a-z]{2,3}_[A-Za-z0-9]+ +#.*$//' | awk '!seen[$0]++'; return ;;
+  esac
+  local v
+  for v in $(_model_voices "$1"); do echo "$v"; done
+}
+
+_model_voices() {
   case "$1" in
     kokoro) echo $KOKORO_AMERICAN_FEMALE $KOKORO_AMERICAN_MALE $KOKORO_BRITISH_FEMALE $KOKORO_BRITISH_MALE $KOKORO_SPANISH_FEMALE $KOKORO_SPANISH_MALE ;;
     kitten-*) echo Bella Jasper Luna Bruno Rosie Hugo Kiki Leo ;;
@@ -96,7 +105,7 @@ list_voices() {
     printf '\xF0\x9F\x87\xAA\xF0\x9F\x87\xB8 Spanish female  (ef_): %s\n' "$KOKORO_SPANISH_FEMALE"
     printf '\xF0\x9F\x87\xAA\xF0\x9F\x87\xB8 Spanish male    (em_): %s\n' "$KOKORO_SPANISH_MALE"
   else
-    model_voices "$MODEL" | tr ' ' '\n' | sed 's/^/  /'
+    model_voices "$MODEL" | sed 's/^/  /'
   fi
   printf '\nModel: %s   Voice in use: %s\n' "$MODEL" "$VOICE"
 }
@@ -110,9 +119,10 @@ list_models() {
     local mark=" " repo dl=no
     [[ "$m" == "$MODEL" ]] && mark="*"
     repo="$(model_field "$m" repo)"
-    is_downloaded "$repo" && dl="yes ($(du -sh "$HUB/models--${repo//\//--}" | awk "{print \$1}"))"
+    [[ -z "$repo" ]] && dl=built-in
+    [[ -n "$repo" ]] && is_downloaded "$repo" && dl="yes ($(du -sh "$HUB/models--${repo//\//--}" | awk "{print \$1}"))"
     printf '%s %-12s %6s %5s %6s %8s %8s %8s %6s  %-12s %s\n' "$mark" "$m" \
-      "$(model_voices "$m" | wc -w | tr -d ' ')" "$(model_field "$m" langs)" "$(model_field "$m" params)" \
+      "$(model_voices "$m" | wc -l | tr -d ' ')" "$(model_field "$m" langs)" "$(model_field "$m" params)" \
       "$(model_field "$m" disk)" "$(model_field "$m" peak_mem)" "$(model_field "$m" startup)" \
       "$(model_field "$m" speed)" "$(model_field "$m" license)" "$dl"
   done
@@ -121,6 +131,10 @@ list_models() {
 }
 
 speak() {
+  if [[ "$MODEL" == "say" ]]; then
+    say -v "$VOICE" "$1"
+    return
+  fi
   local lang=""
   [[ "$MODEL" == "kokoro" ]] && lang="${VOICE:0:1}"
   "$TOOL_PY" - "$(model_field "$MODEL" repo)" "$VOICE" "$(model_field "$MODEL" gain_db)" "$lang" "$1" <<'EOF'
@@ -212,7 +226,7 @@ if [[ "$ACTION" == "model-repos" ]]; then
   exit 0
 fi
 
-has_voice() { [[ " $(model_voices "$MODEL") " == *" $1 "* ]]; }
+has_voice() { model_voices "$MODEL" | awk -v v="$1" '$0 == v || index($0, v " (") == 1 { f = 1 } END { exit !f }'; }
 VOICE_CONFIG_FILE="$CONFIG_DIR/tts-voice-$MODEL"
 
 if [[ -n "$SET_DEFAULT" ]]; then
@@ -240,6 +254,6 @@ if [[ ${#TEXT_PARTS[@]} -eq 0 ]]; then
   exit 1
 fi
 
-[[ -x "$TOOL_PY" ]] || die "mlx-audio tool python not found at $TOOL_PY -- run pst-setup"
+[[ "$MODEL" == "say" || -x "$TOOL_PY" ]] || die "mlx-audio tool python not found at $TOOL_PY -- run pst-setup"
 
 speak "${TEXT_PARTS[*]}"

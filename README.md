@@ -20,7 +20,7 @@ aloud, in stock voices, your own cloned voice, or a voice described in words,
 without anything leaving your machine.
 
 - 🏠 **Fully local** - runs on Apple's MLX framework via [`mlx-audio`](https://github.com/Blaizzy/mlx-audio); no cloud, no API keys, no per-character billing
-- 🧠 **Open-weight models** - ten stock-voice models (Kokoro, Kitten, Pocket, Soprano, Melo, VibeVoice, Qwen3-TTS, Voxtral) and three cloning models (VoxCPM2, Qwen3-TTS, MOSS-TTS-Nano)
+- 🧠 **Open-weight models** - macOS's built-in `say` plus ten stock-voice models (Kokoro, Kitten, Pocket, Soprano, Melo, VibeVoice, Qwen3-TTS, Voxtral) and three cloning models (VoxCPM2, Qwen3-TTS, MOSS-TTS-Nano)
 - 🎙️ **High-quality voices** - 120 stock voices in up to 11 languages, with volume matched across models
 - ⚡ **Streaming playback** - audio starts as it generates, and nothing is written to disk
 - 🪞 **Voice cloning** - speak in your own voice from a 15–20 second recording
@@ -154,6 +154,7 @@ it is.
 
 | Model | Voices | Langs | Disk | First sound | License |
 |---|---|---|---|---|---|
+| `say` — macOS built-in [`say`](https://ss64.com/mac/say.html) | 184 | 40 | 0 GB | 0.1 s | macOS |
 | `kokoro` (default) — [Kokoro-82M](https://huggingface.co/mlx-community/Kokoro-82M-4bit) | 31 | 9 | 0.6 GB | 2.5 s | Apache-2.0 |
 | `kitten-nano` — [Kitten TTS nano](https://huggingface.co/mlx-community/kitten-tts-nano-0.8) | 8 | 1 | 0.06 GB | 0.8 s | Apache-2.0 |
 | `kitten-mini` — [Kitten TTS mini](https://huggingface.co/mlx-community/kitten-tts-mini-0.8) | 8 | 1 | 0.3 GB | 1.1 s | Apache-2.0 |
@@ -173,6 +174,7 @@ it is.
 
 | Model | Params | Peak memory | Speed |
 |---|---|---|---|
+| `say` | - | 0.07 GB | 8× |
 | `kokoro` | 82M | 2.5 GB | 43× |
 | `kitten-nano` | 15M | 1.8 GB | 90× |
 | `kitten-mini` | 80M | 2.1 GB | 24× |

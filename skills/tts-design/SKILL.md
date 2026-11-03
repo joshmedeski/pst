@@ -1,6 +1,6 @@
 ---
 name: tts-design
-description: Speak text aloud in a voice invented from a natural-language description (gender, age, tone, emotion, pace) using VoxCPM2 voice design via the local tts-clone binary — no reference audio needed. Use when the user runs "/pst:tts-design", or asks to hear something spoken in a described voice or mood, e.g. "summarize this and give me a calm and somber voice", "read it like an excited old pirate", "say that in a whispery young woman's voice", "custom voice". Also use with the user's cloned voice when they ask for it styled ("in my voice, but cheerful").
+description: Speak text aloud in a voice invented from a natural-language description (gender, age, tone, emotion, pace) using VoxCPM2 voice design via the local tts-clone binary — no reference audio needed. Use when the user runs "/pst:tts-design", or asks to hear something spoken in a described voice or mood, e.g. "summarize this and give me a calm and somber voice", "read it like an excited old pirate", "say that in a whispery young woman's voice", "custom voice". If the user names a stock model or the macOS say command ("say's robot voice", "a kokoro voice"), use the tts skill instead. Also use with the user's cloned voice when they ask for it styled ("in my voice, but cheerful").
 ---
 
 # TTS Design - speak in a described voice

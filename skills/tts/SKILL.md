@@ -1,6 +1,6 @@
 ---
 name: tts
-description: Summarize conversation feedback and speak it aloud using the local tts binary (Kokoro or another stock-voice model via mlx-audio), and control always-on / verbose voice modes. Use when the user runs "/pst:tts", says "read this back to me", "summarize and speak", "text to speech", wants an audio summary, or wants the assistant to keep speaking throughout the session. Trigger on any request to hear something spoken aloud. If the user describes how the voice should sound (e.g. "calm and somber", "like an old pirate"), use the tts-design skill instead.
+description: Summarize conversation feedback and speak it aloud using the local tts binary (Kokoro or another stock-voice model via mlx-audio, or macOS's built-in say), and control always-on / verbose voice modes. Use when the user runs "/pst:tts", says "read this back to me", "summarize and speak", "text to speech", wants an audio summary, or wants the assistant to keep speaking throughout the session. Trigger on any request to hear something spoken aloud, including when the user names a stock model or voice ("using say's robot voice", "with kokoro's British guy"). Only if the user describes how the voice should sound without naming a stock model (e.g. "calm and somber", "like an old pirate"), use the tts-design skill instead.
 ---
 
 # TTS - Text to Speech
@@ -41,8 +41,40 @@ tts "Your spoken message here"
 
 Do not pass `--model` or `--voice` unless the user asks for a specific one:
 `tts` resolves both from `$PST_TTS_MODEL` / `$PST_TTS_VOICE` and the defaults
-saved with `tts --set-default-model` / `tts --set-default`. Run `tts --models`
-or `tts --voices` to see the options.
+saved with `tts --set-default-model` / `tts --set-default`.
+
+## Picking a model or voice from the request
+
+When the user names a model or describes a voice ("using the say command's
+robot voice, tell me everything's going to be all right"):
+
+1. Map the model words to a model name from `tts --models` ("say command",
+   "macOS voice", "the built-in one" → `say`; "kitten" → `kitten-nano`).
+   If only a voice is described and the model in use has no good match, pick
+   the model that does.
+2. Run `tts --model <model> --voices` and pick the closest voice, using the
+   hints below. Exact names the user gives win.
+3. Pass `--model` and `--voice` for this call only. Never run
+   `--set-default` / `--set-default-model` unless the user says to make it the
+   default.
+4. Speak only the message itself, not the instructions about the voice.
+
+Voice hints where the name doesn't say how it sounds:
+
+- **say**, character voices: `Zarvox` and `Trinoids` robot, `Fred` classic
+  80s computer, `Whisper` whisper, `Albert` croaky old man, `Bad News` and
+  `Good News` sung (gloomy / cheerful), `Bells`, `Cellos`, `Organ`,
+  `Superstar` sung, `Jester` silly, `Bubbles` underwater, `Wobble` wobbly,
+  `Bahh` bleating, `Boing` bouncy, `Junior` child, `Ralph` deep man.
+  Natural voices: `Samantha` (US woman), `Daniel` (UK man), `Karen` (Australian
+  woman), `Moira` (Irish woman), `Rishi` (Indian man), `Tessa` (South African
+  woman). `Grandma`, `Grandpa`, `Eddy`, `Flo`, `Reed`, `Rocko`, `Sandy`,
+  `Shelley` come in many languages; pass the full name, e.g.
+  `"Grandpa (English (UK))"`, to choose the accent.
+- **kokoro**: prefix is accent + gender (`af_` American woman, `am_` American
+  man, `bf_`/`bm_` British, `ef_`/`em_` Spanish).
+- **vibevoice**: prefix is language, suffix is `_man` / `_woman`.
+- **voxtral**: names read as tone + gender (`cheerful_female`, `neutral_male`).
 
 ALWAYS run `tts` via the Bash tool with `run_in_background: true` and **no**
 trailing `&`. A trailing `&` is redundant, trips a command-safety prompt, and

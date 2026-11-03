@@ -1,6 +1,6 @@
 ---
 name: tts-clone
-description: Speak text aloud in the user's own cloned voice using the local tts-clone binary (VoxCPM2, Qwen3-TTS, or MOSS-TTS-Nano via mlx-audio). Use when the user runs "/pst:tts-clone", says "say that in my voice", "read this back in my own voice", "use my cloned voice", or asks for spoken output in a cloned/custom voice rather than a stock one. For stock Kokoro voices and always-on voice modes, use the tts skill instead.
+description: Speak text aloud in the user's own cloned voice using the local tts-clone binary (VoxCPM2, Qwen3-TTS, or MOSS-TTS-Nano via mlx-audio). Use when the user runs "/pst:tts-clone", says "say that in my voice", "read this back in my own voice", "use my cloned voice", or asks for spoken output in a cloned/custom voice rather than a stock one. For stock Kokoro voices and always-on voice modes, use the tts skill instead; for a voice described in words, use tts-design.
 ---
 
 # TTS Clone - speak in a cloned voice

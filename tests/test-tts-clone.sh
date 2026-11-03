@@ -35,4 +35,8 @@ check "--set-default-model rejects unknown" "1" "$("$BIN" --set-default-model no
 check "unknown default left untouched" "qwen3" "$(cat "$XDG_CONFIG_HOME/pst/clone-model")"
 check "--model rejects unknown before speaking" "1" "$("$BIN" --model nope "hi" >/dev/null 2>&1; echo $?)"
 
+check "--design forces voxcpm2" "voxcpm2" "$(in_use --design calm)"
+check "--design needs no installed voice" "tts-clone: no text provided." "$("$BIN" --design calm 2>&1 | head -1)"
+check "--design with --voice still checks the voice" "tts-clone: no such voice 'ghost' (expected $XDG_CONFIG_HOME/pst/voices/ghost.wav)" "$("$BIN" --design calm --voice ghost hi 2>&1 | head -1)"
+
 if [[ "$fails" -eq 0 ]]; then echo "ALL PASS"; else echo "$fails FAILED"; exit 1; fi

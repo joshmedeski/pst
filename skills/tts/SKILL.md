@@ -1,6 +1,6 @@
 ---
 name: tts
-description: Summarize conversation feedback and speak it aloud using the local tts binary (Kokoro or another stock-voice model via mlx-audio), and control always-on / verbose voice modes. Use when the user runs "/pst:tts", says "read this back to me", "summarize and speak", "text to speech", wants an audio summary, or wants the assistant to keep speaking throughout the session. Trigger on any request to hear something spoken aloud.
+description: Summarize conversation feedback and speak it aloud using the local tts binary (Kokoro or another stock-voice model via mlx-audio), and control always-on / verbose voice modes. Use when the user runs "/pst:tts", says "read this back to me", "summarize and speak", "text to speech", wants an audio summary, or wants the assistant to keep speaking throughout the session. Trigger on any request to hear something spoken aloud. If the user describes how the voice should sound (e.g. "calm and somber", "like an old pirate"), use the tts-design skill instead.
 ---
 
 # TTS - Text to Speech

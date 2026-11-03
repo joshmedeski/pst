@@ -50,17 +50,17 @@ TOOL_PY="$(uv tool dir 2>/dev/null || echo "$HOME/.local/share/uv/tools")/mlx-au
 speak() {
   local stream=0
   model_streams "$MODEL" && stream=1
-  "$TOOL_PY" - "$(model_repo "$MODEL")" "$stream" "$1" "$2" <<'EOF'
+  "$TOOL_PY" - "$(model_repo "$MODEL")" "$stream" "$1" "$2" "$DESIGN" <<'EOF'
 import sys
 from mlx_audio.tts.audio_player import AudioPlayer
 from mlx_audio.tts.utils import load_model
 from mlx_audio.utils import load_audio
 
-model_id, stream, ref_wav, text = sys.argv[1:]
+model_id, stream, ref_wav, text, design = sys.argv[1:]
 model = load_model(model_id)
 player = AudioPlayer(sample_rate=model.sample_rate)
-ref_audio = load_audio(ref_wav, sample_rate=model.sample_rate)
-for result in model.generate(text=text, ref_audio=ref_audio, stream=stream == "1"):
+ref_audio = load_audio(ref_wav, sample_rate=model.sample_rate) if ref_wav else None
+for result in model.generate(text=text, ref_audio=ref_audio, instruct=design or None, stream=stream == "1"):
     player.queue_audio(result.audio)
 player.wait_for_drain()
 player.stop()
@@ -70,6 +70,7 @@ EOF
 usage() {
   cat <<EOF
 Usage: tts-clone [--voice <name>] [--model <name>] <text>
+       tts-clone --design <description> [--voice <name>] <text>
 
 Speak text in a cloned voice via mlx-audio.
 
@@ -81,6 +82,11 @@ Options:
   --models             List cloning models and their downloads; * marks the one in use.
   --set-default-model <name>
                        Remember <name> as this machine's default model.
+  --design <description>
+                       Voice design (voxcpm2 only): invent a voice from a
+                       description like "calm, somber older man, slow pace".
+                       No reference audio needed; add --voice to style a
+                       cloned voice instead.
   -h, --help           Show this help.
 
 Voice resolution order:
@@ -99,6 +105,7 @@ Examples:
   tts-clone "the build passed"
   tts-clone --voice josh "twelve files changed"
   tts-clone --model moss-nano "faster, lighter, rougher"
+  tts-clone --design "calm, somber, low voice" "the deploy failed"
 
 Add a voice by placing <name>.wav (a clean ~15-20s sample) in ${VOICES_DIR}.
 EOF
@@ -128,6 +135,8 @@ VOICE="${PST_CLONE_VOICE:-}"
 MODEL="${PST_CLONE_MODEL:-}"
 SET_DEFAULT=""
 SET_DEFAULT_MODEL=""
+DESIGN=""
+VOICE_ARG=""
 LIST_MODELS=0
 TEXT_PARTS=()
 
@@ -144,10 +153,12 @@ while [[ $# -gt 0 ]]; do
     --voice)
       [[ $# -ge 2 ]] || { echo "tts-clone: --voice requires a value" >&2; exit 1; }
       VOICE="$2"
+      VOICE_ARG="$2"
       shift 2
       ;;
     --voice=*)
       VOICE="${1#--voice=}"
+      VOICE_ARG="$VOICE"
       shift
       ;;
     --models)
@@ -161,6 +172,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --model=*)
       MODEL="${1#--model=}"
+      shift
+      ;;
+    --design)
+      [[ $# -ge 2 ]] || { echo "tts-clone: --design requires a description" >&2; exit 1; }
+      DESIGN="$2"
+      shift 2
+      ;;
+    --design=*)
+      DESIGN="${1#--design=}"
       shift
       ;;
     --set-default-model)
@@ -222,6 +242,11 @@ if ! model_repo "$MODEL" >/dev/null; then
   exit 1
 fi
 
+if [[ -n "$DESIGN" ]]; then
+  MODEL="voxcpm2"
+  VOICE="$VOICE_ARG"
+fi
+
 if [[ "$LIST_MODELS" == "1" ]]; then
   for m in $MODELS; do
     mark=" "
@@ -246,10 +271,10 @@ fi
 
 # Resolve the voice: explicit flag / env, then this machine's configured
 # default, then the sole installed voice.
-if [[ -z "$VOICE" && -f "$CONFIG_FILE" ]]; then
+if [[ -z "$DESIGN" && -z "$VOICE" && -f "$CONFIG_FILE" ]]; then
   VOICE="$(tr -d '[:space:]' < "$CONFIG_FILE")"
 fi
-if [[ -z "$VOICE" ]]; then
+if [[ -z "$DESIGN" && -z "$VOICE" ]]; then
   # No mapfile here: /bin/bash on macOS is 3.2 and hooks may not inherit a
   # PATH with homebrew's bash 5.
   AVAILABLE=()
@@ -265,9 +290,10 @@ if [[ -z "$VOICE" ]]; then
   esac
 fi
 
-REF_WAV="$VOICES_DIR/$VOICE.wav"
+REF_WAV=""
+[[ -n "$VOICE" ]] && REF_WAV="$VOICES_DIR/$VOICE.wav"
 
-if [[ ! -f "$REF_WAV" ]]; then
+if [[ -n "$VOICE" && ! -f "$REF_WAV" ]]; then
   echo "tts-clone: no such voice '$VOICE' (expected $REF_WAV)" >&2
   echo "Installed voices:" >&2
   list_voices >&2

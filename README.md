@@ -260,6 +260,23 @@ both plus any Kokoro variants `tts-compare` downloaded. Only models
 pst downloads are considered — anything else in your Hugging Face cache is left
 alone. Deleted models re-download the next time you use them.
 
+### Voice design: a voice from a description
+
+VoxCPM2 can also invent a voice from a natural-language description — gender,
+age, tone, emotion, pace — with no reference audio at all:
+
+```bash
+tts-clone --design "calm, somber, low male voice, slow pace" "the deploy failed"
+tts-clone --design "cheerful" --voice josh "your own voice, styled"
+```
+
+`--design` always uses `voxcpm2`, whatever the default clone model is. Add
+`--voice` to style one of your cloned voices instead of inventing a new one.
+
+In Claude Code it's the **`/pst:tts-design`** skill, and it picks the
+description out of ordinary requests: "summarize this and give me a calm and
+somber voice" summarizes, then speaks it in that voice.
+
 ### How it differs from `tts`
 
 | | `tts` | `tts-clone` |
@@ -348,6 +365,7 @@ invoked independently or composed together.
 |-------|---------|--------|--------------|
 | `tts` | `/pst:tts` | ✅ Available | Summarize + speak text aloud (Kokoro or nine other stock-voice models via mlx-audio). |
 | `tts-clone` | `/pst:tts-clone` | ✅ Available | Speak in your own voice, cloned from a reference recording (VoxCPM2, Qwen3-TTS, or MOSS-TTS-Nano via mlx-audio). |
+| `tts-design` | `/pst:tts-design` | ✅ Available | Speak in a voice invented from a description ("calm and somber, older man") via VoxCPM2 voice design. |
 | `stt` | `/pst:stt` | 🔜 Planned | Local, on-device transcription — talk *to* the machine, not just hear it talk back. |
 | `converse` | `/pst:converse` | 🔜 Planned | Full duplex voice loop (STT → agent → TTS), usable in parallel with other work. |
 | `wake-word` | — | 🔜 Planned | Hands-free local trigger ("hey pst") so the assistant listens only when summoned. |

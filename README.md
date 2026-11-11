@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="256" src="assets/logo.png" alt="pst logo: a vintage oscilloscope showing p∿t" />
+  <img src="assets/pst-cover.jpeg" alt="pst: a vintage oscilloscope showing p∿t on a desk beside headphones, a microphone, and a keyboard" />
 </p>
 
 <h1 align="center">pst, local-first speech for macOS</h1>
